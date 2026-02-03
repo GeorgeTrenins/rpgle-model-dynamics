@@ -60,9 +60,9 @@ def gle_cxx(
     Args:
         t (float or ndarray): time(s) for which to compute the covariance matrix
         omega (float): frequency of the harmonic oscillator
-        Ap (ndarray): momentum + auxiliary variable block of the drift matrix
-        Cp (ndarray, optional): stationary covariance matrix for the momentum + auxvar subsystem in the absence of an external potential; allows specifyng a non-thermal distribution
-        C0 (ndarray, optional): covariance matrix at time 0
+        Ap (ndarray): momentum + auxiliary variable block of the drift matrix, for dynamics expressed in mass-weighted coordinates
+        Cp (ndarray, optional): stationary covariance matrix for the momentum + auxvar subsystem in the absence of an external potential (mass-weighted coordinates); allows specifyng a non-thermal distribution
+        C0 (ndarray, optional): covariance matrix at time 0, in mass-weighted coordinates
         u (float or ndarray, optional): second time variable for cross-correlation, to calculate <v(t) v(u)^T>
         beta (float, optional): reciprocal temperature, 1/kB*T
         mass (float, optional): mass of the harmonic oscillator

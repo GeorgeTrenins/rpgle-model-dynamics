@@ -2,6 +2,7 @@ import numpy as np
 import json
 import pytest
 import tempfile
+import matplotlib.pyplot as plt
 
 from rpmdgle.pes.harmonic import PES
 from rpmdgle.propagators.gle import SepGLEaux
@@ -12,13 +13,13 @@ from rpmdgle.sysbath.spectral.expohmic import Density as ExpOhmicBath
 from rpmdgle.utils import tcfs
 
 @pytest.fixture
-def aux_params(tmp_path):
+def kantorovich_params(tmp_path):
     """Fixture: Write a Debye + 2 oscillatory auxvar parameter file and return its path."""
     aux = [{
         "tauD": [1.0],
         "cD": [0.8],
         "tauO": [0.5, 0.3],
-        "omegaO": [2.0, 3.5],
+        "omegaO": [0.5, 1.5],
         "cO": [0.5, 0.3]
     }]
     aux_path = tmp_path / "aux.json"
@@ -33,7 +34,7 @@ def system_params(tmp_path):
         "mass": 1.5,
         "omega": 0.7,
         "beta": 2.0,
-        "dt": 0.02,
+        "dt": 0.05,
         "nsteps": 10000
     }
     sys_path = tmp_path / "system.json"
@@ -47,35 +48,53 @@ def build_Ap_s1s2(tauD, cD, tauO, omegaO, cO, mass):
     n_osc = len(tauO)
     naux = n_debye + 2 * n_osc
     Ap = np.zeros((1 + naux, 1 + naux))  # [p, s1..., s2...]
-
+    A = Ap[1:, 1:]
+    theta = Ap[0, 1:]
     # Debye (s1)
     for i in range(n_debye):
-        Ap[1 + i, 1 + i] = 1 / tauD[i]
+        A[i, i] = 1 / tauD[i]
+        theta[i] = cD[i]
     # Oscillatory (s1/s2 pairs)
     for i in range(n_osc):
-        s1_idx = n_debye + i
-        s2_idx = n_debye + n_osc + i
-        Ap[1 + s1_idx, 1 + s1_idx] = 1 / tauO[i]
-        Ap[1 + s2_idx, 1 + s2_idx] = 1 / tauO[i]
-        Ap[1 + s1_idx, 1 + s2_idx] = omegaO[i]
-        Ap[1 + s2_idx, 1 + s1_idx] = -omegaO[i]
+        i1 = n_debye + 2*i
+        i2 = i1 + 1
+        A[i1, i1] = 1 / tauO[i]
+        A[i2, i2] = 1 / tauO[i]
+        A[i1, i2] = omegaO[i]
+        A[i2, i1] = -omegaO[i]
+        theta[i1] = cO[i]
+    # NOTE: in SepGLEaux, this mass-weighting is applied to the gradient of the system-bath coupling
+    Ap[0, 1:] /= np.sqrt(mass)
+    Ap[1:, 0] = -Ap[0, 1:]
+    return Ap
 
-    # Coupling vector (cD, cO) in s1/s2 ordering
-    cvec = np.zeros(naux)
-    for i in range(n_debye):
-        cvec[i] = cD[i]
-    for i in range(n_osc):
-        cvec[n_debye + i] = cO[i]
+def plot_cross_correlations(tvec, corr, ref, filename="cross_correlation_debug.eps"):
+    """
+    Plot all diagonal cross-correlation functions (autocorrelations) for each variable.
+    """
+    nvars = corr.shape[1]
+    fig, axes = plt.subplots(nvars, 1, figsize=(7, 2.5*nvars), sharex=True)
+    if nvars == 1:
+        axes = [axes]
+    for i in range(nvars):
+        axes[i].plot(tvec, corr[:, i], label="Numerical", color="C0")
+        axes[i].plot(tvec, ref[:, i], label="Analytical", color="C1", linestyle="--")
+        if i == 0:
+            axes[i].set_ylabel(f"C_xx(t)")
+        elif i == 1:
+            axes[i].set_ylabel(f"C_pp(t)")
+        else:
+            axes[i].set_ylabel(f"C_s{i-2}s{i-2}(t)")
+        axes[i].legend()
+        axes[i].grid(True)
+    axes[-1].set_xlabel("Time")
+    fig.tight_layout()
+    fig.savefig(filename, format="eps")
+    plt.close(fig)
 
-    Ap_full = np.zeros((1 + naux, 1 + naux))
-    Ap_full[0, 1:] = cvec / np.sqrt(mass)
-    Ap_full[1:, 0] = -Ap_full[0, 1:]
-    Ap_full[1:, 1:] = Ap[1:, 1:]
-    return Ap_full
-
-def test_sepgleaux_ou_regression(aux_params, system_params):
+def test_sepgleaux_kantorovich(kantorovich_params, system_params):
     # --- 1. Load parameters ---
-    with open(aux_params, "r") as f:
+    with open(kantorovich_params, "r") as f:
         aux = json.load(f)
     with open(system_params, "r") as f:
         sys = json.load(f)
@@ -152,7 +171,13 @@ def test_sepgleaux_ou_regression(aux_params, system_params):
     ])
 
     # --- 7. Compare numerical and analytical results ---
+    plot_cross_correlations(tvec, corr, ref, filename="cross_correlation_debug.eps")
     np.testing.assert_allclose(corr, ref, rtol=0.01, atol=0.01)
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+    # from pathlib import Path
+    # root = Path(__file__).parent
+    # kantorovich_params = root / "kantorovich.json"
+    # system_params = root / "system.json"
+    # test_sepgleaux_kantorovich(kantorovich_params, system_params)

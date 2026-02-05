@@ -11,10 +11,9 @@
 
 from __future__ import print_function, division, absolute_import
 from rpmdgle.myargparse import MyArgumentParser
-from rpmdgle.sysbath import spectral, coupling
 from rpmdgle import propagators
 from rpmdgle.pes.pi import Ring, RestrainedRing
-import importlib
+from rpmdgle.system import get_PES
 import numpy as np
 import json
 import pickle
@@ -43,28 +42,6 @@ md_group.add_argument('--propa', help="json file with the parameters needed to i
 md_group.add_argument('--restraint', default=None, help="json file specifying the parameters of a harmonic restrain aimed at keeping the system one side of the dividing surface.")
 
 
-def get_PES(kwargs):
-    """fetch the classical external potential"""
-    pesmod = importlib.import_module(kwargs.pop("module"))
-    pesname = kwargs.pop("name")
-    PES = getattr(pesmod, pesname)(**kwargs)
-    return PES, PES.UNITS
-
-def get_bath(PES, bath_data, F_data):
-    """construct the Caldeira-Leggett model of the dissipative system
-    given the classical external potential.
-    """
-    if bath_data is None:
-        return PES
-    if F_data is None:
-        F = coupling.linear.Coupling(UNITS=PES.UNITS.__class__.__name__)
-    else:
-        gname = F_data.pop("name")
-        F = getattr(coupling, gname).Coupling(**F_data)
-    Jname = bath_data.pop("name")
-    Nmodes = bath_data.pop("Nmodes")
-    SB = getattr(spectral, Jname).Density(PES, Nmodes, coupling=F, **bath_data)
-    return SB
 
 def make_SB(args):
     """Initialise the classical external potential and the harmonic-bath (Caldeira--Leggett) representation of the external potential coupled to a dissipative environment.

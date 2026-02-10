@@ -13,7 +13,7 @@ from __future__ import print_function, division, absolute_import
 from rpmdgle.myargparse import MyArgumentParser
 from rpmdgle import propagators
 from rpmdgle.pes.pi import Ring, RestrainedRing
-from rpmdgle.system import get_PES
+from rpmdgle.system import get_PES, get_bath
 import numpy as np
 import json
 import pickle
@@ -35,6 +35,7 @@ parser.add_argument('--x0', default=None, type=float, help='shift the centroid t
 parser.add_argument('--fix_centroid', action='store_true', help='Fix the centroid of the system ring-polymer.')
 parser.add_argument('--seed', default=31415, type=int, help="Integer seed for the random number generator" )
 parser.add_argument('--properties', type=str, default='', help="JSON file specifying property output.")
+parser.add_argument('--MC', action='store_true', help="Use Monte Carlo sampling to initialise the configuration of harmonic bath modes. Only relevant if using a explicit harmonic bath.")
 md_group = parser.add_argument_group('MD', 'settings for sampling the thermal distribution with MD')
 md_group.add_argument('--burn', type=str, default='100 fs',  help="Duration of initial equilibration.")
 md_group.add_argument('--traj', type=str, default='1 ps', help="Duration of a production trajectory.")
@@ -133,7 +134,11 @@ def make_propa(args, PES, SB, UNITS, propa_json, fix_centroid=False):
         propa = getattr(propagators, propa_class)(rpPES, SB, dt, x.shape, rng=args.seed, beta=beta, **kwarg_dict)
     else:
         # full Caldeira-Leggett
-        x, beta, rpPES = make_RP(args.nrep, args.nbead, (1+nbath,), T, SB, UNITS, args.restraint)
+        x, beta, rpPES = make_RP(
+            args.nrep, 
+            args.nbead, 
+            (1+nbath,), T, SB, UNITS, 
+            getattr(args, "restraint", None))
         # friction represented explicitly by harmonic bath modes
         propa = getattr(propagators, propa_class)(rpPES, dt, x.shape, rng=args.seed, beta=beta, **kwarg_dict)
     print(f"RNG seed: {args.seed}")
@@ -254,7 +259,7 @@ def main(args):
     T, PES, SB, UNITS = make_SB(args)
     propa = make_propa(
         args, PES, SB, UNITS, args.propa, fix_centroid=args.fix_centroid)    
-    equilibrate(UNITS, T, propa, args)
+    equilibrate(UNITS, T, propa, args, resample_bath=args.MC)
     production(UNITS, T, propa, args)
     with open("final.pkl", 'wb') as f:
         pickle.dump(dict(x = propa.x.copy()), f)

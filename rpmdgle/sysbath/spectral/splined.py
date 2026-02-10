@@ -54,7 +54,10 @@ class Density(BaseSpectralDensity):
         ans = np.zeros_like(t)
         ans_flat = np.reshape(ans, -1)
         for i,t in enumerate(tvec):
-            ans_flat[i] = shift_lambda_to_kernel(self.Lambda, None, None, None, 0, self.wmax, self.eps, t)[1]
+           ans_flat[i] = np.asarray(
+               shift_lambda_to_kernel(
+                   self.Lambda, None, None, None, 0, self.wmax, self.eps, t)[1]
+               ).item()
         if ans.ndim == 0:
             return ans.item()
         else:

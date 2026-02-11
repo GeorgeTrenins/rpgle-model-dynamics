@@ -129,7 +129,7 @@ def make_propa(args, PES, SB, UNITS, propa_json, fix_centroid=False):
         kwarg_dict["fixed"] = [(slice(None), slice(1), slice(1))]
     if propa_class in {"SepGLEaux", "SepGLEPILE"}:
         # system-only potential
-        x, beta, rpPES = make_RP(args.nrep, args.nbead, (1,), T, PES, UNITS, args.restraint)
+        x, beta, rpPES = make_RP(args.nrep, args.nbead, (1,), T, PES, UNITS, getattr(args, "restraint", None))
         # implicit friction
         propa = getattr(propagators, propa_class)(rpPES, SB, dt, x.shape, rng=args.seed, beta=beta, **kwarg_dict)
     else:

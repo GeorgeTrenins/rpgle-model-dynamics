@@ -227,3 +227,64 @@ def get_Cqp(
                     C += o/a
             Cqp[i, j] = C
     return np.real(Cqp)
+
+def get_friction_kernel(
+    t: Union[float, np.ndarray], 
+    Ap: np.ndarray,
+) -> np.ndarray:
+    """Calculate the friction kernel for a GLE with drift matrix Ap, using the formula K(t) = theta^T exp(-t A) theta, where theta is the first row of Ap, excluding Ap[0,0] and A is the lower-right block Ap[1:,1:]. See https://doi.org/10.1021/ct900563s for notation.
+
+    Args:
+        t (Union[float, np.ndarray]): time or times for which to compute the friction kernel
+        Ap (np.ndarray): drift matrix for the momentum + auxiliary variables block
+
+    Returns:
+        np.ndarray: friction kernel values at the requested times
+    """
+    from scipy.linalg import expm
+    is_scalar = np.isscalar(t)
+    t = np.atleast_1d(np.asarray(t))
+    if np.ndim(t) != 1:
+        raise RuntimeError("t should be a one-dimensional array")
+    t = np.abs(t)
+    Ap = np.asarray(Ap)
+    check_matrix(Ap, 'Ap')
+    theta = Ap[0,1:]
+    A = Ap[1:,1:]
+    kernel: np.ndarray = np.einsum(
+        'ijk,j,k->i', 
+        expm(-t[:,None,None] * A), theta, theta)
+    if is_scalar:
+        return kernel.item()
+    else:
+        return kernel
+
+def get_friction_spectrum(
+    omega: Union[float, np.ndarray], 
+    Ap: np.ndarray
+) -> np.ndarray:
+    """Calculate the friction spectrum for a GLE with drift matrix Ap.
+    
+    Computes Λ(ω) = θᵀ A (A² + ω² I)⁻¹ θ, where θ is the first row of Ap 
+    (excluding Ap[0,0]) and A is the lower-right block Ap[1:,1:].
+    """
+    is_scalar = np.isscalar(omega)
+    omega = np.atleast_1d(np.asarray(omega))
+    if np.ndim(omega) != 1:
+        raise RuntimeError("omega should be a one-dimensional array")
+    Ap = np.asarray(Ap)
+    check_matrix(Ap, 'Ap')
+    theta = Ap[0,1:]
+    A = Ap[1:,1:]
+    lamda, Q = np.linalg.eig(A)
+    y = np.linalg.solve(Q, theta)  # y = Q⁻¹θ
+    z = Q.T @ theta           
+    spectrum: np.ndarray = np.real(np.sum(
+        y*z*lamda / (lamda**2 + omega[:,None]**2),
+        axis=-1
+    ))
+    if is_scalar:
+        return spectrum.item()
+    else:
+        return spectrum
+    

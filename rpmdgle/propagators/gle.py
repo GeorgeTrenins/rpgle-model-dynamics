@@ -35,6 +35,8 @@ from rpmdgle.utils.nmtrans import MatMulNormalModes
 import numpy.typing as npt
 from rpmdgle.utils.ou import check_matrix
 from scipy.linalg import expm, cholesky
+import copy
+import json
 
 _squeeze1d = lambda arr: np.atleast_1d(np.squeeze(arr))
         
@@ -251,12 +253,11 @@ class SepGLEaux(SepGLEPILE):
             xshape (ndarray): shape of the array to propagate
             rng (int or Generator): seed for random number generator
             beta (float): reciprocal temperature, 1/kB*T
-            aux (list[Dict] or list[list]): parametrisation of the `Ap` drift matrix 
+            aux (list[Dict]): parametrisation of the `Ap` drift matrix 
                 (see https://doi.org/10.1021/ct900563s for definitions). Each element 
                 in the list corresponds to a different normal-mode index, in the order
-                0, -1, +1, -2, +2, ... . For backwards compatibility, the elements may be
-                dictionaries (see below). Otherwise, expecting the Ap coefficient matrix, 
-                for propagation in mass-weighted coordinates.
+                0, -1, +1, -2, +2, ... . For backwards compatibility, the element
+                dictionaries may specify "Kantorovich" parameters for the special case of (oscillatory) Prony embedding - see below. Otherwise, expecting the Ap coefficient matrix, for propagation in mass-weighted coordinates.
 
         Notes:
             The length of `aux` must be equal to `nbeads`.
@@ -271,7 +272,7 @@ class SepGLEaux(SepGLEPILE):
         """Compute the coefficients for propagating GLE dynamics according to Eqs (S38-S42) of https://doi.org/10.1103/PhysRevLett.134.226201 . 
 
         Args:
-            aux (list[Dict] or list[list]): parametrisation of the `Ap` drift matrix 
+            aux (list[Dict]): parametrisation of the `Ap` drift matrix 
                 (see https://doi.org/10.1021/ct900563s for definitions). Each element 
                 in the list corresponds to a different normal-mode index, in the order
                 0, -1, +1, -2, +2, ... . 
@@ -285,19 +286,9 @@ class SepGLEaux(SepGLEPILE):
         self.saux = []
         for params in aux:
             if isinstance(params, dict):
-                # Build Ap matrix from dictionary parameters
-                Ap = build_Ap_kantorovich(
-                    tauD = _squeeze1d(params.get('tauD', np.array([]))),
-                    cD = _squeeze1d(params.get('cD', np.array([]))),
-                    tauO = _squeeze1d(params.get('tauO', np.array([]))),
-                    omegaO = _squeeze1d(params.get('omegaO', np.array([]))),
-                    cO = _squeeze1d(params.get('cO', np.array([])))
-                )
+                Ap = parse_aux_spec(params)
             else:
-                Ap = np.asarray(params, dtype=float)
-                check_matrix(Ap, 'Ap')
-                if Ap[0,0] != 0.0:
-                    raise NotImplementedError("Expecting zero in the (0,0) position of the Ap matrix. Propagation of dissipative dynamics including a Markovian component is not yet implemented.")
+                raise ValueError("Each item in the aux list must be a dictionary specifying either the Kantorovich parameters or the Ap matrix for the auxiliary variable dynamics. Got item of type {:s}.".format(type(params)))
             self.theta.append(np.copy(Ap[0,1:]))
             A = np.copy(Ap[1:,1:])
             self.Amat.append(A)
@@ -398,6 +389,48 @@ class SepGLEaux(SepGLEPILE):
         self.B()
         self.O()
         self.ethermo += RingNM.econs(self) + self.aux_kinetic_energy()
+
+
+def parse_aux_spec(params: dict) -> np.ndarray:
+    """Parse a dictionary of auxiliary variable parameters into an Ap matrix.
+    The dictionary may either have the keys `tauD`, `cD`, `tauO`, `omegaO`, and `cO` corresponding to the parameters of the Debye and oscillatory components of the GLE when using the Kantorovic parameterisation, or the key `Ap`, giving the full auxvar + system drift matrix.
+
+    Args:
+        params (dict)
+
+    Returns:
+        ndarray: Ap matrix for propagating auxiliary variables
+    """
+
+    data = copy.deepcopy(params)
+    external = data.pop('external', False)
+    friction_scale = data.pop('friction_scale', 1.0)
+    frequency_scale = data.pop('frequency_scale', 1.0)
+    if external:
+        with open(external, 'r') as f:
+            specs = json.load(f)
+    else:
+        specs = data
+    keys = set(specs.keys())
+    if keys.issubset({'tauD', 'cD', 'tauO', 'omegaO', 'cO'}):
+        Ap = build_Ap_kantorovich(
+            tauD = _squeeze1d(specs.get('tauD', np.array([]))),
+            cD = _squeeze1d(specs.get('cD', np.array([]))),
+            tauO = _squeeze1d(specs.get('tauO', np.array([]))),
+            omegaO = _squeeze1d(specs.get('omegaO', np.array([]))),
+            cO = _squeeze1d(specs.get('cO', np.array([])))
+        )
+    elif keys == {'Ap'}:
+        Ap = np.asarray(specs['Ap'], dtype=float)
+        check_matrix(Ap, 'Ap')
+    else:
+        raise KeyError("Auxiliary variable specification dictionary must have either the keys 'tauD', 'cD', 'tauO', 'omegaO', and 'cO' for Kantorovich parametrisation, or the key 'Ap' for direct specification of the drift matrix. Got keys: {}".format(keys))    
+    Ap[0,1:] *= np.sqrt(friction_scale * frequency_scale)
+    Ap[1:,0] *= np.sqrt(friction_scale * frequency_scale)
+    Ap[1:,1:] *= frequency_scale
+    return Ap
+
+
 
 
 def build_Ap_kantorovich(

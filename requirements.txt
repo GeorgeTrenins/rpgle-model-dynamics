@@ -3,5 +3,7 @@ scipy
 sympy
 matplotlib
 ase
-mpi4py
 pandas
+pytest
+opt_einsum
+tqdm

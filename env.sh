@@ -17,6 +17,6 @@ ENV_BASE_DIR=$(cd "$(dirname "$(readlink -f "$script")")" && pwd)
 echo "Setting up RPMD-GLE paths to base folder $ENV_BASE_DIR"
 
 export PATH=$ENV_BASE_DIR/bin:$PATH
-export PYTHONPATH="${ENV_BASE_DIR}/src":$PYTHONPATH
+export PYTHONPATH="${ENV_BASE_DIR}":$PYTHONPATH
 
 unset ENV_BASE_DIR

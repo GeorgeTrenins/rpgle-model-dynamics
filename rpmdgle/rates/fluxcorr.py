@@ -128,18 +128,40 @@ def production_run(
 def main():
     from rpmdgle.myargparse import MyArgumentParser
     from rpmdgle.rates.qtst import equilibrate
-    parser = MyArgumentParser(parents=[qtst.parser], description="Calculate the flux-side correlation function.",  conflict_handler='resolve', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--propa2', required=True, help="json file with the parameters needed to initialize the second (production) propagator. The first propagator samples the distribution at the barrier top.")
-    parser.add_argument('--relax', default='100 fs', type=str, help="Relaxation time between spawning NVE trajectories")
-    parser.add_argument('--spawn', default=100, type=int, help="Number of pairs of NVE trajectories to spawn")
-    parser.add_argument('--nboot', default=100, type=int, help="Number of resamples for bootstrap error estimation of the transmission coefficient.")
-    parser.add_argument('--stride', type=str, default=None, help="Stride for recording the flux-side correlation function.")
+
+    parser = MyArgumentParser(description="Calculate the RPMD flux-side correlation function according to Collepardo-Guevara, Craig, and Manolopoulos https://doi.org/10.1063/1.2883593")
+
+    # Create mutually exclusive group for temperature specification
+    temp_group = parser.add_mutually_exclusive_group()
+    temp_group.add_argument('-T', type=float, help="Temperature in Kelvin.")
+    temp_group.add_argument('--beta', type=float, help="Reciprocal temperature in internal units")
+    #
+    parser.add_argument('-P', '--potential', required=True, help="json file with the parameters needed to initialize the external potential")
+    parser.add_argument('--bath', default=None, help="json file with the parameters needed to initialize a spectral density")
+    parser.add_argument('--coupling', default=None, help="json file with the parameters needed to initialize a separable coupling")
+    parser.add_argument('--nrep', type=int, default=1, help="Number of independent system replicas to run in parallel.")
+    parser.add_argument('--nbead', default=1, type=int, help="Number of beads in ring-polymer discretisation.")
+    parser.add_argument('--config', type=str, default=None, help='name of pkl with an input ring-polymer configuration; if None, all positions set to 0.')
+    parser.add_argument('--x0', required=True, type=float, help='location of the dividing surface')
+    parser.add_argument('--seed', default=31415, type=int, help="Integer seed for the random number generator" )
+    parser.add_argument('--properties', type=str, default='', help="JSON file specifying which extra properties to record during the NVE trajectories.")
+    parser.add_argument('--MC', action='store_true', help="Use Monte Carlo sampling to initialise the configuration of harmonic bath modes. Only relevant if using a explicit harmonic bath.")
+    md_group = parser.add_argument_group('MD', 'molecular dynamics settings for sampling the thermal distribution and running NVE trajectories')
+    md_group.add_argument('--propa', help="json file with the parameters needed to initialize the propagator for thermal sampling at the barrier top.")
+    md_group.add_argument('--propa2', required=True, help="json file with the parameters to initialize the NVE propagator of the 'unpinned' system.")
+    md_group.add_argument('--burn', type=str, default='100 fs',  help="Duration of initial equilibration.")
+    md_group.add_argument('--relax', default='100 fs', type=str, help="Relaxation time between spawning NVE trajectories")
+    md_group.add_argument('--traj', type=str, default='1 ps', help="Duration of a production trajectory.")
+    md_group.add_argument('--stride', type=str, default=None, help="Stride for recording the flux-side correlation function.")
+    md_group.add_argument('--spawn', default=100, type=int, help="Number of pairs of NVE trajectories to spawn")
+
     parser.add_argument('--progress', action='store_true', help="Display progress bar for NVE trajectories.")
+    parser.add_argument('--nboot', default=100, type=int, help="Number of resamples for bootstrap error estimation of the transmission coefficient.")
 
     args = parser.parse_args()
     propa1, propa2, T, UNITS = setup_propagators(args)
     equilibrate(UNITS, T, propa1, args, resample_bath=args.MC)
-    production_run(UNITS, T, propa1, propa2, args)
+    production_run(UNITS, T, propa1, propa2, args, resample_bath=args.MC)
     print('Done.')
     print()
 

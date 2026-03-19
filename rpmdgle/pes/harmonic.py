@@ -18,7 +18,7 @@ class PES(BasePES):
     def __init__(self, hess=[[1.0,],], mass=1.0, shift=0.0, bias=0.0, UNITS="atomic"):
         """Harmonic potential, specified as
 
-            V(x) = 0.5 * (x - shift)·hess·(x-shift) - bias
+            V(x) = 0.5 * (x-shift)·hess·(x-shift) - bias
 
         Args:
             hess (2D-array, optional): hessian (not mass weighted).
@@ -121,7 +121,7 @@ class nmPES(PES):
     def __init__(self, omega=1.0, mass=1, shift=0, bias=0, UNITS="atomic"):
         """Harmonic potential in normal mode coordinates, specified as
 
-            V(x) = 0.5 * (x - shift)·diag[m*omega**2]·(x-shift) - bias
+            V(x) = 0.5 * (x-shift)·diag[m*omega**2]·(x-shift) - bias
 
         Args:
             hess (1D-array, optional): normal mode frequencies.

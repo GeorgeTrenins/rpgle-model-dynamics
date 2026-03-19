@@ -11,10 +11,9 @@
 
 from __future__ import print_function, division, absolute_import
 from rpmdgle.myargparse import MyArgumentParser
-from rpmdgle.sysbath import spectral, coupling
 from rpmdgle import propagators
 from rpmdgle.pes.pi import Ring, RestrainedRing
-import importlib
+from rpmdgle.system import get_PES, get_bath
 import numpy as np
 import json
 import pickle
@@ -36,6 +35,7 @@ parser.add_argument('--x0', default=None, type=float, help='shift the centroid t
 parser.add_argument('--fix_centroid', action='store_true', help='Fix the centroid of the system ring-polymer.')
 parser.add_argument('--seed', default=31415, type=int, help="Integer seed for the random number generator" )
 parser.add_argument('--properties', type=str, default='', help="JSON file specifying property output.")
+parser.add_argument('--MC', action='store_true', help="Use Monte Carlo sampling to initialise the configuration of harmonic bath modes. Only relevant if using a explicit harmonic bath.")
 md_group = parser.add_argument_group('MD', 'settings for sampling the thermal distribution with MD')
 md_group.add_argument('--burn', type=str, default='100 fs',  help="Duration of initial equilibration.")
 md_group.add_argument('--traj', type=str, default='1 ps', help="Duration of a production trajectory.")
@@ -43,28 +43,6 @@ md_group.add_argument('--propa', help="json file with the parameters needed to i
 md_group.add_argument('--restraint', default=None, help="json file specifying the parameters of a harmonic restrain aimed at keeping the system one side of the dividing surface.")
 
 
-def get_PES(kwargs):
-    """fetch the classical external potential"""
-    pesmod = importlib.import_module(kwargs.pop("module"))
-    pesname = kwargs.pop("name")
-    PES = getattr(pesmod, pesname)(**kwargs)
-    return PES, PES.UNITS
-
-def get_bath(PES, bath_data, F_data):
-    """construct the Caldeira-Leggett model of the dissipative system
-    given the classical external potential.
-    """
-    if bath_data is None:
-        return PES
-    if F_data is None:
-        F = coupling.linear.Coupling(UNITS=PES.UNITS.__class__.__name__)
-    else:
-        gname = F_data.pop("name")
-        F = getattr(coupling, gname).Coupling(**F_data)
-    Jname = bath_data.pop("name")
-    Nmodes = bath_data.pop("Nmodes")
-    SB = getattr(spectral, Jname).Density(PES, Nmodes, coupling=F, **bath_data)
-    return SB
 
 def make_SB(args):
     """Initialise the classical external potential and the harmonic-bath (Caldeira--Leggett) representation of the external potential coupled to a dissipative environment.
@@ -151,12 +129,16 @@ def make_propa(args, PES, SB, UNITS, propa_json, fix_centroid=False):
         kwarg_dict["fixed"] = [(slice(None), slice(1), slice(1))]
     if propa_class in {"SepGLEaux", "SepGLEPILE"}:
         # system-only potential
-        x, beta, rpPES = make_RP(args.nrep, args.nbead, (1,), T, PES, UNITS, args.restraint)
+        x, beta, rpPES = make_RP(args.nrep, args.nbead, (1,), T, PES, UNITS, getattr(args, "restraint", None))
         # implicit friction
         propa = getattr(propagators, propa_class)(rpPES, SB, dt, x.shape, rng=args.seed, beta=beta, **kwarg_dict)
     else:
         # full Caldeira-Leggett
-        x, beta, rpPES = make_RP(args.nrep, args.nbead, (1+nbath,), T, SB, UNITS, args.restraint)
+        x, beta, rpPES = make_RP(
+            args.nrep, 
+            args.nbead, 
+            (1+nbath,), T, SB, UNITS, 
+            getattr(args, "restraint", None))
         # friction represented explicitly by harmonic bath modes
         propa = getattr(propagators, propa_class)(rpPES, dt, x.shape, rng=args.seed, beta=beta, **kwarg_dict)
     print(f"RNG seed: {args.seed}")
@@ -277,7 +259,7 @@ def main(args):
     T, PES, SB, UNITS = make_SB(args)
     propa = make_propa(
         args, PES, SB, UNITS, args.propa, fix_centroid=args.fix_centroid)    
-    equilibrate(UNITS, T, propa, args)
+    equilibrate(UNITS, T, propa, args, resample_bath=args.MC)
     production(UNITS, T, propa, args)
     with open("final.pkl", 'wb') as f:
         pickle.dump(dict(x = propa.x.copy()), f)

@@ -30,20 +30,20 @@ class Density(BaseSpectralDensity):
         self.xgrid = np.asarray(x)
         self.ygrid = np.asarray(y)
         self.wmax = np.max(self.xgrid)
-        self._cs = CubicSpline(
+        self._spline = CubicSpline(
             self.xgrid, 
             self.eta*self.ygrid,
             axis = kwargs.pop('axis', 0),
             bc_type = kwargs.pop('bc_type', 'not-a-knot'),
             extrapolate = kwargs.pop('extrapolate', None))
-        self._integral = self._cs.antiderivative()
+        self._antiderivative = self._spline.antiderivative(nu=1)
         self._reorganization_lambda = 2*self.K(0)
         super().__init__(PES, Nmodes, *args, **kwargs)
         
         
     def Lambda(self, omega):
         y = np.abs(omega)
-        return np.where(y > self.wmax, 0.0, self._cs(y))
+        return np.where(y > self.wmax, 0.0, self._spline(y))
     
     def J(self, omega):
         return np.abs(omega) * self.Lambda(omega)
@@ -54,7 +54,10 @@ class Density(BaseSpectralDensity):
         ans = np.zeros_like(t)
         ans_flat = np.reshape(ans, -1)
         for i,t in enumerate(tvec):
-            ans_flat[i] = shift_lambda_to_kernel(self.Lambda, None, None, None, 0, self.wmax, self.eps, t)[1]
+           ans_flat[i] = np.asarray(
+               shift_lambda_to_kernel(
+                   self.Lambda, None, None, None, 0, self.wmax, self.eps, t)[1]
+               ).item()
         if ans.ndim == 0:
             return ans.item()
         else:
@@ -64,14 +67,16 @@ class Density(BaseSpectralDensity):
         """Calculate the discrete frequencies according to https://doi.org/10.1002/jcc.24527
         """     
         from scipy.optimize import root_scalar, RootResults
+        value_at_w0 = self._antiderivative(0.0)
+        cumulative_spectrum = lambda x: np.nan_to_num(
+            self._antiderivative(x, extrapolate=False) - value_at_w0, nan=0.0)
+        exact_reorganisation = 4/np.pi * cumulative_spectrum(self.wmax)  # Eq. (2.5)
+        weight = np.pi * exact_reorganisation / (4 * self.Nmodes)
         freqs = []
-        prev = 0.0
-        I0 = self._integral(0)
+        prev = 0.0 
         for j in range(self.Nmodes):
-            RHS = I0 + (j+1/2)/self.Nmodes * (np.pi*self.exact_reorganisation()/4)
-            fun = lambda x: self._integral(x) - RHS
-            ans: RootResults = root_scalar(
-                fun, method="bisect", bracket=[prev, self.wmax])
+            fun = lambda x: ( cumulative_spectrum(x) - (j+1/2) * weight)  # Eq. (2.6)
+            ans: RootResults = root_scalar(fun, method="bisect", bracket=[prev, self.wmax])
             if not ans.converged:
                 raise RuntimeError(f"Failed to find discrete frequency number {j+1}")
             freqs.append(ans.root)

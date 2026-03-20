@@ -53,7 +53,7 @@ def gle_cxx(
         beta: Optional[float] = None,
         mass: Optional[float] = 1.0) -> np.ndarray:
     """
-    Calculate the covariance matrix <v(0) v(t)^T> where v(t) = (q, p, s^T) are the
+    Calculate the covariance matrix <v(t) v(0)^T> where v(t) = (q, p, s^T) are the
     position and momentum of a harmonic oscillator plus the auxiliary variable coordinates.
     See https://doi.org/10.1021/ct900563s for notation.
 

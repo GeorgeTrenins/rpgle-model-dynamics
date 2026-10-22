@@ -288,7 +288,7 @@ class SepGLEaux(SepGLEPILE):
             if isinstance(params, dict):
                 Ap = parse_aux_spec(params)
             else:
-                raise ValueError("Each item in the aux list must be a dictionary specifying either the Kantorovich parameters or the Ap matrix for the auxiliary variable dynamics. Got item of type {:s}.".format(type(params)))
+                raise ValueError(f"Each item in the aux list must be a dictionary specifying either the Kantorovich parameters or the Ap matrix for the auxiliary variable dynamics. Got item of type {type(params)}.")
             self.theta.append(np.copy(Ap[0,1:]))
             A = np.copy(Ap[1:,1:])
             self.Amat.append(A)

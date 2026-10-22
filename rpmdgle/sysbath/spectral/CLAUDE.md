@@ -6,7 +6,10 @@ This package holds the spectral densities that define the harmonic bath. Each su
 |---|---|---|
 | `expohmic` | $\eta \omega \exp(-\omega/\omega_c)$ | $ \dfrac{2 \eta \omega_c / \pi}{(1 + \omega_c^2 t^2)}$ | 
 | `debye` | $\eta \omega \dfrac{\omega_c^2}{\omega^2+\omega_c^2}$ | $\eta\omega_ce^{-\omega_c t}$ | 
+| `brownian` | $\eta \omega \dfrac{\omega_0^4}{(\omega^2-\omega_0^2)^2+\gamma^2\omega^2}$ | $\dfrac{\eta\omega_0^2}{\gamma}e^{-\gamma t/2}\left[\cos\bar\omega t + \dfrac{\gamma}{2\bar\omega}\sin\bar\omega t\right]$, $\bar\omega = \sqrt{\omega_0^2-\gamma^2/4}$ | 
 | `splined` | $\eta \omega\cdot{}$ `spline(ω)` | numerical cosine transform | 
+
+For `brownian` with $\gamma > 2\omega_0$, $\cos$ and $\sin$ become $\cosh$ and $\sinh$ of $\kappa t$, where $\kappa = \sqrt{\gamma^2/4-\omega_0^2}$. At $\gamma = 2\omega_0$ the bracket is $1 + \gamma t/2$. The code chooses the regime from the sign of $\omega_0^2 - \gamma^2/4$, and each branch stays accurate close to critical damping. The overdamped branch is evaluated as a sum of decaying exponentials, so it does not overflow at long times.
 
 ## Conventions
 
@@ -79,8 +82,11 @@ $$
 
 ```json
 {"name": "expohmic", "Nmodes": 64, "eta": 1.0, "omega_cut": 0.002, "UNITS": "atomic"}
+{"name": "brownian", "Nmodes": 64, "eta": 1.0, "omega0": 0.001, "gamma": 0.0005}
 {"name": "splined", "Nmodes": 64, "eta": 1.0, "eps": 1e-10, "x": [0.0, ...], "y": [1.0, ...]}
 ```
+
+- `brownian` takes the static friction `eta`, the undamped frequency `omega0` of the oscillator mode and its damping rate `gamma`. All three must be positive, or the constructor raises `ValueError`. The reorganisation energy is $\lambda = 2\eta\omega_0^2/\gamma$.
 
 - Parameter values must be bare numbers in the PES's internal units. Nothing here calls `str2base`, so strings such as `"200 cm^-1"` fail.
 - `UNITS` defaults to `"atomic"` and is **not** taken from the PES. If the PES uses a different unit system, set `"UNITS"` in the bath JSON to the same class name, or the constructor raises `RuntimeError`. The default coupling built by `get_bath_coupling` does take its units from the PES.
@@ -91,8 +97,8 @@ $$
 1. Create `<name>.py` containing `class Density(BaseSpectralDensity)`.
 2. Store all parameters on `self` **before** calling `super().__init__(PES, Nmodes, *args, **kwargs)`. The base constructor calls `quadpoints()` and `exact_reorganisation()` immediately.
 3. Implement `J`, `Lambda`, `K`, `quadpoints` and `exact_reorganisation`. `J`, `Lambda` and `K` must accept NumPy arrays and also scalars, because `scipy.integrate.quad` passes scalars.
-4. If there is no closed form for the frequencies, subclass `BaseNumericalSpectralDensity(PES, Nmodes, wmax, eps, ...)` instead. It finds the frequencies by bisecting `quad(Lambda)` and sets `λ = 2K(0)`, so `K` must already work before `super().__init__`. No existing density uses this class yet.
+4. If there is no closed form for the frequencies, subclass `BaseNumericalSpectralDensity(PES, Nmodes, wmax, eps, ...)` instead. It finds the frequencies by bisecting `quad(Lambda)` and sets `λ = 2K(0)`, so `K` must already work before `super().__init__`. No existing density uses this class yet. If the cumulative integral of Λ has a closed form, follow `brownian` instead. It subclasses `BaseSpectralDensity`, implements the normalised CDF `cdf(ω)` analytically, and finds the frequencies by solving `cdf(ω) = (j+½)/N` with `brentq`, without calling `quad`.
 5. Add the module to `from . import ...` in `__init__.py`. `get_bath` looks densities up with `getattr(spectral, name)`.
-6. Expose `omega_cut` or `wmax` so that `bathplot.py` picks a sensible plot range.
+6. Expose `omega_cut` or `wmax` so that `bathplot.py` picks a sensible plot range. In `brownian`, `wmax` is only a plotting hint: the frequency below which 95% of $\int_0^\infty \Lambda \, \mathrm{d}\omega$ lies. It is not an integration cutoff, unlike in `splined`.
 
-No test targets this package directly; `tests/propagators/gle/ou_gle/test_sepgleaux.py` only exercises `expohmic`. To check a new density, compare `K(t)` with `(2/π) quad(Lambda, 0, ∞, weight='cos', wvar=t)`, and check that `∫₀^{w[j]} Λ / ∫₀^∞ Λ · N` equals `j + ½` for zero-based `j`.
+`tests/sysbath/spectral/test_brownian.py` tests `brownian` against `quad` in all three damping regimes and close to critical damping. No other density has its own test; `tests/propagators/gle/ou_gle/test_sepgleaux.py` only exercises `expohmic`. To check a new density, compare `K(t)` with `(2/π) quad(Lambda, 0, ∞, weight='cos', wvar=t)`, and check that `∫₀^{w[j]} Λ / ∫₀^∞ Λ · N` equals `j + ½` for zero-based `j`. `test_brownian.py` can serve as a template.

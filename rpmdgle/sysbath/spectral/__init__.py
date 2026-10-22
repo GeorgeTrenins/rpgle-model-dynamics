@@ -1,1 +1,1 @@
-from . import debye, expohmic, splined
+from . import brownian, debye, expohmic, splined

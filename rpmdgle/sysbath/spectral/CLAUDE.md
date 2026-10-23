@@ -80,7 +80,7 @@ Each term is discretised on its own, as if the system were coupled to independen
 - `propagators/gle.py::build_pmf` builds the potential of mean field from `c`, `w` and `bath_mass`, and evaluates `F` with `coupling.both`. Even the implicit-bath propagators (`SepGLE*`) construct a discrete bath, so `Nmodes` sets the accuracy of the PMF. The PMF sums over all modes, so it is the sum of the PMFs of the terms.
 - `rates/qtst.py::sample_bath_modes` uses `ww`, `mass[..., 1:]` and `bath_eq(q)`, which returns the equilibrium bath positions `c F(q)/(m ω²)`.
 - `visualisation/bathplot.py` and `auxplot.py` call `Lambda`, `K` and `w`. `bathplot.py` takes the default plot range from `wplot`, the largest `wplot` of the terms, and with `--terms` it also plots each term from `densities` and colours the quadrature lines by `term_slices`.
-- `potential`, `gradient` and `both` are analytical. `hessian` falls back to `BasePES` finite differences.
+- `potential`, `gradient` and `both` are analytical. `hessian` falls back to `BasePES`, which takes finite differences of the analytic gradient.
 - In the configuration's last axis, index 0 is the system coordinate `q` and indices `1..N` are the bath modes `r`. The code splits off `ndof − Nmodes` system coordinates, but the coupling reduces the last axis and `mass` is built from `np.atleast_1d(PES.mass)`. In practice only one-dimensional systems work. `potential`, `gradient` and `both` accept a single configuration of shape `(1+Nmodes,)` as well as batches, and `bath_eq` accepts a `q` of shape `(1,)`.
 
 ## Construction and JSON input

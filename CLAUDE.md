@@ -56,7 +56,7 @@ Everything is vectorised over independent replicas. Configuration arrays have sh
 
 ### PES layers
 
-- `pes/_base.BasePES` is the interface: `potential`, `gradient`, `hessian`, `force`, `both`, `all`. Gradients and Hessians fall back to finite differences.
+- `pes/_base.BasePES` is the interface: `potential`, `gradient`, `hessian`, `force`, `both`, `all`. Gradients and Hessians fall back to fourth-order central differences from `numderiv.batch_jacobian`, which differentiates along the last axis and treats the leading axes as independent configurations. The gradient differences `potential` with step `gradh`. The Hessian differences `gradient` (analytic wherever a subclass defines it) with step `hessh`, symmetrises the result.
 - `pes/pi.Ring` wraps a physical PES into a ring polymer. `BasePI.__getattr__` synthesises `potential`, `gradient` and the other methods as `polymer_*` + `external_*`. Propagators often call `external_both` and `polymer_potential` separately.
 - `sysbath/bath.CaldeiraLeggett` is a `BasePES`. It wraps the system PES plus `Nmodes` discretised harmonic bath modes into the full Caldeira–Leggett potential, and also exposes the bath parameters `c`, `w`, `bath_mass` and the coupling `F(q)`. Its spectral density is a sum of one or more terms, each a `sysbath/spectral/*.Density` (the continuous J(ω) alone) discretised into its own block of modes. All terms share the coupling.
 

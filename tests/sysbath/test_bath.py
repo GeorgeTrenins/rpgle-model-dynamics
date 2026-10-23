@@ -168,6 +168,44 @@ def test_unbatched_configuration(terms, coupling):
     np.testing.assert_allclose(r_eq, bath.bath_eq(x[..., :1])[1, 2], rtol=1e-14)
 
 
+def exptanh_d2F(q, eps1, eps2, delta):
+    """Second derivative of the exptanh coupling F(q) = q (1 + ε1 exp(-y²/2) + ε2 tanh y), y = q/δ"""
+    y = q/delta
+    return (eps1*np.exp(-y**2/2)*y*(y**2 - 3) + 2*eps2*(1 - y*np.tanh(y))/np.cosh(y)**2)/delta
+
+
+@pytest.mark.parametrize("coupling, d2F", [
+    (None, np.zeros_like),
+    (ExpTanhCoupling(eps1=-0.5, eps2=0.3, delta=1.2), lambda q: exptanh_d2F(q, -0.5, 0.3, 1.2)),
+], ids=["linear", "exptanh"])
+def test_hessian(terms, coupling, d2F):
+    """The finite-difference Hessian agrees with the closed form,
+        ∂²V/∂q²     = V_sys'' + Σ_ν [c_ν² F'² / (m_ν ω_ν²) - c_ν y_ν F'']
+        ∂²V/∂q∂r_ν  = -c_ν F'
+        ∂²V/∂r_ν∂r_μ = m_ν ω_ν² δ_νμ
+    with y_ν = r_ν - c_ν F / (m_ν ω_ν²)
+    """
+    pes = make_pes()
+    bath = CaldeiraLeggett(pes, terms, coupling=coupling)
+    rng = np.random.default_rng(1618)
+    x = rng.normal(size=(4, 3, 1+bath.Nmodes))
+    q, r = x[..., :1], x[..., 1:]
+    dF = bath.coupling.gradient(q)
+    y = r - bath.bath_eq(q)
+    ref = np.zeros(x.shape + (1+bath.Nmodes,))
+    ref[..., 0, 0] = pes.hessian(q)[..., 0, 0] + np.sum(
+        bath.c**2 * dF**2 / bath.mww - bath.c * y * d2F(q), axis=-1)
+    ref[..., 0, 1:] = ref[..., 1:, 0] = -bath.c * dF
+    ref[..., 1:, 1:] = np.diag(bath.mww)
+    H = bath.hessian(x)
+    np.testing.assert_allclose(H, ref, rtol=0, atol=1e-11*np.max(np.abs(ref)))
+    np.testing.assert_allclose(bath.hessian(x[2, 1]), H[2, 1], rtol=1e-14)
+    V, G, H2 = bath.all(x)
+    np.testing.assert_array_equal(V, bath.potential(x))
+    np.testing.assert_array_equal(G, bath.gradient(x))
+    np.testing.assert_array_equal(H2, H)
+
+
 def test_pmf_additivity(terms):
     """The potential of mean field is linear in the squared couplings of the bath modes"""
     pes = make_pes()

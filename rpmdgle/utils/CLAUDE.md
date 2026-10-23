@@ -93,8 +93,8 @@ Normal mode $n$ sees the frequency-shifted bath $J_n(\omega) = J\big(\sqrt{\omeg
   - The constructor's per-axis parameters are indexed by the axis numbers passed in `axes`.
   - Nothing in the package uses it and no test covers it. A manual check on $x^2$ over $[0, 1]$ agreed with `quad` to 1e-14.
 - `kde.kde(data, grid, bw, kernel="gaussian", axis=-1)` averages `kernel(data, grid, bw)` over `axis`, so the caller has to broadcast the arguments, as in `kde(data[..., None], xgrid, bw, axis=0)`.
-  - The accepted kernels are `gaussian`, `tophat`, `triangular` and `epanechnikov`. `analyse.py` uses `epanechnikov`.
-  - `tricube_kernel` exists, but `kde()` raises `ValueError` for `"tricube"`.
+  - `kde()` looks the kernel up by name in `KERNELS`. The `@register` decorator fills that dictionary, under the function name minus its `_kernel` suffix. The registered kernels are `gaussian`, `tophat`, `triangular`, `epanechnikov` and `tricube`. `analyse.py` uses `epanechnikov`.
+  - To add a kernel, define `<name>_kernel(x, mu, sigma)` and decorate it with `@register`; `kde()` itself needs no change. An unknown name raises `ValueError`, and the message lists the registered kernels.
 - `special.sinc(x, nu=0)` is the *unnormalised* $\sin x / x$; `scipy.special.sinc` is $\sin \pi x/\pi x$. With `nu = 1` or `2` it returns the first or second derivative, and switches to a Taylor series for $|x| < 10^{-4}\pi$.
 - `special.logcosh` and `special.logsinh` take real input. `logsinh` always returns a complex array, adding $i\pi$ for $x < 0$, so take `.real` for $x > 0$. `logsinh(0)` is `-inf`.
 - `arrays.slice_along_axis` and `arrays.idx_along_axis` use basic indexing and return views. Writes through them reach the original array, which `pes/pi.py` relies on.

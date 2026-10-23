@@ -140,10 +140,32 @@ def test_potential_and_gradient(terms):
     pot, grad = bath.both(x)
     np.testing.assert_allclose(pot, bath.potential(x), rtol=1e-14)
     np.testing.assert_allclose(grad, bath.gradient(x), rtol=1e-14)
-    # the couplings expect a batch of configurations
-    x0 = x[0, :1]
-    fd = numderiv.gradient(lambda y: bath.potential(y[None])[0], x0[0], order=4)
-    np.testing.assert_allclose(bath.gradient(x0)[0], fd, rtol=1e-7, atol=1e-9)
+    x0 = x[0, 0]
+    fd = numderiv.gradient(bath.potential, x0, order=4)
+    np.testing.assert_allclose(bath.gradient(x0), fd, rtol=1e-7, atol=1e-9)
+
+
+@pytest.mark.parametrize(
+        "coupling", [None, ExpTanhCoupling(eps1=-0.5, eps2=0.3, delta=1.2)], ids=["linear", "exptanh"])
+def test_unbatched_configuration(terms, coupling):
+    """A single configuration gives the same results as the same configuration in a batch"""
+    bath = CaldeiraLeggett(make_pes(), terms, coupling=coupling)
+    rng = np.random.default_rng(2718)
+    x = rng.normal(size=(4, 3, 1+bath.Nmodes))
+    x0 = x[1, 2]
+    pot = bath.potential(x0)
+    assert np.ndim(pot) == 0
+    np.testing.assert_allclose(pot, bath.potential(x)[1, 2], rtol=1e-14)
+    grad = bath.gradient(x0)
+    assert grad.shape == (1+bath.Nmodes,)
+    np.testing.assert_allclose(grad, bath.gradient(x)[1, 2], rtol=1e-14)
+    pot_both, grad_both = bath.both(x0)
+    assert np.ndim(pot_both) == 0
+    np.testing.assert_allclose(pot_both, pot, rtol=1e-14)
+    np.testing.assert_allclose(grad_both, grad, rtol=1e-14)
+    r_eq = bath.bath_eq(x0[:1])
+    assert r_eq.shape == (bath.Nmodes,)
+    np.testing.assert_allclose(r_eq, bath.bath_eq(x[..., :1])[1, 2], rtol=1e-14)
 
 
 def test_pmf_additivity(terms):

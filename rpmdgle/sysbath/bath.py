@@ -140,15 +140,23 @@ class CaldeiraLeggett(BasePES):
     def bath_eq(self, q):
         """Return the equilibrium positions of the bath modes
         given the system coordinate q.
+
+        Args:
+            q (ndarray): system coordinate, shape (..., 1)
+
+        Returns:
+            ndarray: equilibrium bath positions, shape (..., Nmodes)
         """
-        return self.c*self.coupling.potential(q)[...,None] / self.mww
+        # the couplings return a float for a single configuration
+        F = np.asarray(self.coupling.potential(q))
+        return self.c*F[...,None] / self.mww
 
     def potential(self, x):
         ndof = x.shape[-1]
         f = ndof - self.Nmodes
         q = x[...,:f]
         r = x[...,f:]
-        y = (r - self.c*self.coupling.potential(q)[...,None] / self.mww)
+        y = r - self.bath_eq(q)
         pot = np.sum(self.mww/2 * y**2, axis=-1)
         pot += self.PES.potential(q)
         return pot
@@ -162,7 +170,7 @@ class CaldeiraLeggett(BasePES):
         gq = g[...,:f]
         gr = g[...,f:]
         gq[:] = self.PES.gradient(q)
-        y = (r - self.c*self.coupling.potential(q)[...,None] / self.mww)
+        y = r - self.bath_eq(q)
         dgdq = self.coupling.gradient(q)
         gr[:] = self.mww * y
         gq[:] -= np.sum(self.c * y * dgdq, axis=-1, keepdims=True)
@@ -177,7 +185,7 @@ class CaldeiraLeggett(BasePES):
         gq = g[...,:f]
         gr = g[...,f:]
         pot, gq[:] = self.PES.both(q)
-        y = (r - self.c*self.coupling.potential(q)[...,None] / self.mww)
+        y = r - self.bath_eq(q)
         dgdq = self.coupling.gradient(q)
         gr[:] = self.mww * y
         gq[:] -= np.sum(self.c * y * dgdq, axis=-1, keepdims=True)

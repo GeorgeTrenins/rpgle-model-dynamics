@@ -59,7 +59,7 @@ Each term is discretised on its own, as if the system were coupled to independen
   \frac{c_\nu^2}{m_\nu \omega_\nu^2} = \frac{\lambda_k}{2N_k}
   $$
 
-  Modes of different terms carry different weights unless $\lambda_k / N_k$ is the same for all terms.
+ 
 - `quadpoints(N)` must return $N$ frequencies in ascending order. Each block of `w` is therefore ascending, but the whole array is not sorted. `term_slices[k]` is the slice of the bath-mode arrays that holds term $k$.
 - `quadrature(f)` and `l_quadrature(f)` take `f` as an array of the values $f(\omega_\nu)$ and use the discrete modes to approximate
 
@@ -81,7 +81,7 @@ Each term is discretised on its own, as if the system were coupled to independen
 - `rates/qtst.py::sample_bath_modes` uses `ww`, `mass[..., 1:]` and `bath_eq(q)`, which returns the equilibrium bath positions `c F(q)/(m ω²)`.
 - `visualisation/bathplot.py` and `auxplot.py` call `Lambda`, `K` and `w`. `bathplot.py` takes the default plot range from `wplot`, the largest `wplot` of the terms, and with `--terms` it also plots each term from `densities` and colours the quadrature lines by `term_slices`.
 - `potential`, `gradient` and `both` are analytical. `hessian` falls back to `BasePES` finite differences.
-- In the configuration's last axis, index 0 is the system coordinate `q` and indices `1..N` are the bath modes `r`. The code splits off `ndof − Nmodes` system coordinates, but the coupling reduces the last axis and `mass` is built from `np.atleast_1d(PES.mass)`. In practice only one-dimensional systems work. The couplings return a Python float for an unbatched configuration of shape `(1+Nmodes,)`, which `potential` cannot index, so always pass at least one leading replica axis.
+- In the configuration's last axis, index 0 is the system coordinate `q` and indices `1..N` are the bath modes `r`. The code splits off `ndof − Nmodes` system coordinates, but the coupling reduces the last axis and `mass` is built from `np.atleast_1d(PES.mass)`. In practice only one-dimensional systems work. `potential`, `gradient` and `both` accept a single configuration of shape `(1+Nmodes,)` as well as batches, and `bath_eq` accepts a `q` of shape `(1,)`.
 
 ## Construction and JSON input
 

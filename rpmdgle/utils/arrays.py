@@ -61,14 +61,14 @@ def index_in_slice(slice_obj: slice, index: int) -> bool:
     return index in range_obj
 
 
-def string_to_slice(s: str) -> slice:
-    """Convert a string representation of a single integer, list of integers, or slice into a slice object
+def string_to_slice(s: str) -> int | list[int] | slice:
+    """Convert a string representation of a single integer, list of integers, or slice into an index
 
     Args:
         s (str): slice specification, e.g. '1', '0,1,3' or '2:-1:2'
 
     Returns:
-        slice: corresponding slice object
+        int | list[int] | slice: an int for '1', a list for '0,1,3', a slice for '2:-1:2' or ':'
     """
     if s == ":":
         slc = slice(None)

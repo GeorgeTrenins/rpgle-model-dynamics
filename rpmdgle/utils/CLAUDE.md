@@ -4,7 +4,7 @@ Self-contained numerical helpers. When you add a submodule, add its name to both
 
 | Module | Contents | Used by |
 |---|---|---|
-| `arrays` | `slice_along_axis`, `idx_along_axis`, `append_dims`, `string_to_slice`, `index_in_slice` | `pes/pi.py`, `propagators/verlet.py`, `langevin.py`, `properties.py`, `rfft`, `tcfs` |
+| `arrays` | `slice_along_axis`, `idx_along_axis`, `append_dims`, `string_to_slice`, `index_in_slice` | `pes/pi.py`, `propagators/verlet.py`, `langevin.py`, `properties.py`, `rfft`, `tcfs`, `visualisation/lineplot.py` |
 | `rfft` | `RealFFT`, a wrapper for real FFTs along one axis | `nmtrans` |
 | `nmtrans` | `FFTNormalModes`, `MatMulNormalModes` | `propagators/verlet.py` (FFT), `propagators/gle.py` (MatMul) |
 | `tcfs` | `correlate`, `time_averaged_correlation` | tests, `notebooks/thermal_tcfs.ipynb` |
@@ -105,7 +105,7 @@ Normal mode $n$ sees the frequency-shifted bath $J_n(\omega) = J\big(\sqrt{\omeg
 - `special.logcosh` and `special.logsinh` take real input. `logsinh` always returns a complex array, adding $i\pi$ for $x < 0$, so take `.real` for $x > 0$. `logsinh(0)` is `-inf`.
 - `arrays.slice_along_axis` and `arrays.idx_along_axis` use basic indexing and return views. Writes through them reach the original array, which `pes/pi.py` relies on.
 - `arrays.append_dims(arr, n)` appends `n` size-1 axes, so that per-mode or per-bead arrays broadcast against configurations.
-- `arrays.string_to_slice` returns an `int`, a `list` or a `slice`, whatever its annotation says. `visualisation/lineplot.py` has its own copy.
+- `arrays.string_to_slice` returns an `int` (`'1'`), a `list` of ints (`'0,1,3'`) or a `slice` (`'2:-1:2'`, `':'`), so callers must handle all three.
 - `arrays.index_in_slice` handles only non-negative `start` and `stop`. For example, `slice(None, -1)` contains nothing.
 
 ## `fitaux`: pre-fitted auxiliary-variable parameters

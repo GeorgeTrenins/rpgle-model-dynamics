@@ -8,6 +8,32 @@ Python implementation of dissipative ring-polymer molecular dynamics for simple 
 
 ### Potential energy surface
 
+### Harmonic bath
+
+The bath file (`--bath`) specifies the spectral density of a harmonic (Caldeira–Leggett) bath. `name` selects a module in `rpmdgle.sysbath.spectral` (`expohmic`, `debye`, `brownian` or `splined`), `Nmodes` is the number of discrete bath modes, and the remaining keys are the parameters of the spectral density, as bare numbers in the internal units of the PES.
+
+```json
+{
+    "name" : "expohmic",
+    "Nmodes" : 64,
+    "eta" : 1.0,          // static friction, including the system mass
+    "omega_cut" : 0.002
+}
+```
+
+A spectral density that is a sum of several terms lists them under `terms`. Each term is discretised separately with its own `Nmodes`, so the bath has 48 + 16 modes here.
+
+```json
+{
+    "terms" : [
+        {"name" : "expohmic", "Nmodes" : 48, "eta" : 1.0, "omega_cut" : 0.002},
+        {"name" : "brownian", "Nmodes" : 16, "eta" : 0.2, "omega0" : 0.001, "gamma" : 0.0005}
+    ]
+}
+```
+
+All terms couple to the system through the same function, which is linear unless a coupling file is given with `--coupling`. An optional `"UNITS"` key must match the unit system of the PES.
+
 ### Propagator
 
 #### Velocity Verlet

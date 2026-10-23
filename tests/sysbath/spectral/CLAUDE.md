@@ -1,6 +1,6 @@
 # CLAUDE.md — `tests/sysbath/spectral`
 
-Tests for `rpmdgle/sysbath/spectral`. So far only `brownian` has tests, in `test_brownian.py`. They are deterministic, take under a second and write no files. Their reference values come from `scipy.integrate.quad` and from closed-form results such as Λ(0) = η.
+Tests for `rpmdgle/sysbath/spectral`. So far only `brownian` has tests, in `test_brownian.py`. They are deterministic, take under a second and write no files. Their reference values come from `scipy.integrate.quad` and from closed-form results such as Λ(0) = η. `test_discretisation` and `test_get_bath` build a one-term `CaldeiraLeggett` bath. The discretisation of every density, and baths that sum several densities, are tested one level up in `tests/sysbath/test_bath.py`.
 
 ## Running
 
@@ -9,7 +9,7 @@ pytest tests/sysbath/spectral -W error::RuntimeWarning
 ```
 
 - `-W error::RuntimeWarning` turns NumPy overflow and invalid-value warnings into failures. The tests check that `K(t)` stays finite at long times and near critical damping, so use this flag after changing `brownian.py`. The tests pass with it.
-- The `bath` fixture runs each test at five damping rates, with the IDs `underdamped`, `critical`, `overdamped`, `near-critical-under` and `near-critical-over`. Select cases by node ID or with `-k`:
+- The `density` fixture, a `brownian.Density`, runs each test at five damping rates, with the IDs `underdamped`, `critical`, `overdamped`, `near-critical-under` and `near-critical-over`. Select cases by node ID or with `-k`:
 
   ```bash
   pytest "tests/sysbath/spectral/test_brownian.py::test_cdf[near-critical-over]"

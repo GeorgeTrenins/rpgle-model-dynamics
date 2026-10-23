@@ -9,7 +9,8 @@ from rpmdgle.pes.harmonic import PES
 from rpmdgle.pes.pi import Ring
 from rpmdgle.propagators.gle import SepGLEaux
 from rpmdgle.sysbath.coupling.linear import Coupling as LinearCoupling
-from rpmdgle.sysbath.spectral.expohmic import Density as ExpOhmicBath
+from rpmdgle.sysbath.bath import CaldeiraLeggett
+from rpmdgle.sysbath.spectral.expohmic import Density as ExpOhmic
 from rpmdgle.utils import tcfs
 from rpmdgle.utils.ou import gle_cxx
 
@@ -234,7 +235,8 @@ def test_sepgleaux_kantorovich(kantorovich_params, system_params):
     eta = 1.0
     omega_cut = 5.0
     
-    bath = ExpOhmicBath(pes, Nmodes, eta, omega_cut, coupling=LinearCoupling())
+    bath = CaldeiraLeggett(
+        pes, [(ExpOhmic(eta, omega_cut), Nmodes)], coupling=LinearCoupling())
     rpPES = Ring(Nmodes, (1,), pes, beta)
     propa = SepGLEaux(rpPES, bath, dt, xshape, rng, beta, aux)
 
@@ -331,7 +333,8 @@ def test_sepgleaux_direct_matrix(direct_matrix_params, system_params):
     eta = 1.0
     omega_cut = 5.0
     
-    bath = ExpOhmicBath(pes, Nmodes, eta, omega_cut, coupling=LinearCoupling())
+    bath = CaldeiraLeggett(
+        pes, [(ExpOhmic(eta, omega_cut), Nmodes)], coupling=LinearCoupling())
     rpPES = Ring(Nmodes, (1,), pes, beta)
     propa = SepGLEaux(rpPES, bath, dt, xshape, rng, beta, aux)
 

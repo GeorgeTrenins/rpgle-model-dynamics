@@ -262,8 +262,7 @@ def get_Cqp(
         Aqp : Union[float, np.ndarray], 
         Dqp : Union[float, np.ndarray]) -> np.ndarray:
     """
-    Compute the stationary covariance matrix for mass-weighted variables that solves
-    Aqp Cqp + Cqp Aqp^T = Dqp.
+    Compute the stationary covariance matrix for mass-weighted variables that solves the Lyapunov equation Aqp Cqp + Cqp Aqp^T = Dqp. The solution is symmetrised to remove rounding-level asymmetry.
 
     Args:
         Aqp (ndarray): full drift matrix, shape (n+1, n+1)
@@ -271,23 +270,20 @@ def get_Cqp(
 
     Returns:
         ndarray: stationary covariance matrix, shape (n+1, n+1)
+
+    Raises:
+        ValueError: if two eigenvalues of Aqp sum to (nearly) zero, 
+        so that the process has no well-defined stationary covariance
     """
-    import scipy.linalg as sclin
-    eigs, O = sclin.eig(Aqp)
-    O_inv = np.linalg.inv(O)
-    n = Aqp.shape[0]
-    Cqp = np.zeros_like(Aqp, dtype=complex)
-    M = O_inv @ Dqp @ np.transpose(O_inv)
-    for i in range(n): 
-        for j in range(n):
-            C = 0j
-            for k in range(n):
-                for l in range(n):
-                    o = O[i, k] * M[k, l] * O[j, l]
-                    a = eigs[k] + eigs[l]
-                    C += o/a
-            Cqp[i, j] = C
-    return np.real(Cqp)
+    import warnings
+    from scipy.linalg import solve_continuous_lyapunov
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        try:
+            Cqp = solve_continuous_lyapunov(Aqp, Dqp)
+        except RuntimeWarning as w:
+            raise ValueError(f"No well-defined stationary covariance for this drift matrix: {w}") from w
+    return (Cqp + np.transpose(Cqp)) / 2
 
 def get_friction_kernel(
     t: Union[float, np.ndarray], 

@@ -60,7 +60,7 @@ The notation follows Ceriotti et al. (doi:10.1021/ct900563s). `Ap` is the drift 
   - The result has shape `S + (2+naux, 2+naux)`. If `t` and `u` are both 1-D, the result is their outer product, with `S = (len(t), len(u))`. Otherwise, `t` and `u` broadcast as NumPy arrays. In both cases `t` varies along the leading axis of `S` and `u` along the trailing axis.
   - Without `C0`, the process is stationary and `t` and `u` may take any real value. With `C0`, the process starts at time 0, so a negative time raises `RuntimeError`.
   - $q$ and $p$ are returned in physical units (rescaled by `mass`). The auxiliary components stay mass-weighted.
-- `get_Cqp` solves $A_{qp}C + CA_{qp}^\mathsf{T} = D_{qp}$ by eigendecomposition, in an O(n⁴) loop. That is fine for a few auxiliary variables.
+- `get_Cqp` solves $A_{qp}C + CA_{qp}^\mathsf{T} = D_{qp}$ with `scipy.linalg.solve_continuous_lyapunov` which stays accurate when $A_{qp}$ is defective. If two eigenvalues of $A_{qp}$ sum to nearly zero, there is no stationary state and `get_Cqp` raises a `ValueError`. It symmetrises the result, $(C + C^\mathsf{T})/2$.
 - `wnle_cqq(t, beta, omega, tau, m=1)` gives $\langle q(t)q(0)\rangle$ under white-noise Langevin dynamics with friction $\gamma = 1/\tau$.
   - `omega` and `tau` must be scalars. All four parameters must be positive, or it raises `ValueError`.
   - `gle_cxx(t, omega, [[1/tau]], beta=beta, mass=m)[..., 0, 0]` gives the same function by an independent route, which makes it a useful check.

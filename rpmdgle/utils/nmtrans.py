@@ -41,7 +41,6 @@ class BaseNMTransform(object):
     def get_nm_freqs(self):
 
         self.nm_freqs = 2*np.sin(np.abs(self.indices) * np.pi/self.nbeads)
-        self.mats_freqs = 2*np.abs(self.indices)
 
     def cart2mats(self, cart, mats=None):
         raise NotImplementedError

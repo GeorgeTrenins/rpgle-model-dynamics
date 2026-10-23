@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 __all__ = [
     "arrays",
     "calculus",
-    "fitaux",
     "kde",
     "kernel_transforms",
     "nmtrans",
@@ -26,7 +25,7 @@ __all__ = [
 
 if TYPE_CHECKING:
     # Visible to static analysers and IDEs only; never executed.
-    from . import (arrays, calculus, fitaux, kde, kernel_transforms,
+    from . import (arrays, calculus, kde, kernel_transforms,
                    nmtrans, ou, rfft, special, tcfs)
 
 

@@ -107,34 +107,10 @@ Normal mode $n$ sees the frequency-shifted bath $J_n(\omega) = J\big(\sqrt{\omeg
 - `arrays.append_dims(arr, n)` appends `n` size-1 axes, so that per-mode or per-bead arrays broadcast against configurations.
 - `arrays.string_to_slice` returns an `int` (`'1'`), a `list` of ints (`'0,1,3'`) or a `slice` (`'2:-1:2'`, `':'`), so callers must handle all three.
 - `arrays.index_in_slice(slice_obj, index, length=None)` tells whether `seq[index]` is among the elements of `seq[slice_obj]`.
-  - With `length = len(seq)` it follows Python's slicing rules exactly, through `range(length)[slice_obj]`, including negative bounds, a negative index, a negative step and clipping. An index outside the sequence gives `False`.
   - Without `length` it reads the slice literally as `range(start, stop, step)`. This is valid only for non-negative index, `start` and `stop` and a positive step, and anything negative raises `ValueError`. The rule is conservative: it also rejects some cases whose answer does not depend on the length, such as `slice(None)` with index −1.
   - A zero step raises `ValueError` in both modes, as `seq[::0]` does.
 
-## `fitaux`: pre-fitted auxiliary-variable parameters
-
-This package does **not** fit anything. It takes Kantorovich parameters (`tauD`, `cD`, `tauO`, `cO`, `omegaO`) that were fitted elsewhere, as functions of the reduced normal-mode frequency $\omega_n/\omega_c$, interpolates them with splines, and scales them to physical units for an `expohmic` bath. The data files are not in the repository.
-
-- **CSV layout.** The first header row holds the parameter names (`nmfreq`, `tauD`, `cD`, ...). The second header row holds the auxiliary-variable index (0, 1, ...). Each following row is one reduced frequency. `MultiAuxParams` reads both header rows as a `MultiIndex`. `BaseOneAuxParam` reads the first row as the header and drops the second (`.iloc[1:]`), so both classes expect the same layout.
-- `MultiAuxParams` fits one weighted `UnivariateSpline` per auxiliary variable. It raises `RuntimeError` for frequencies above the tabulated range. With `sort="ascending"` or `"descending"`, it sorts the values across auxiliary variables above `sorting_cutoff`, which keeps the spline branches from crossing.
-- `BaseOneAuxParam` handles a single auxiliary variable, and subclasses implement `extrapolate(w)` for frequencies beyond the data. In reduced units, `expohmic.OneAuxParam` uses `omegaO → w`, `tauO → 0.4415·w` and `cO → √K_n(0)`, where `zero_time_kernel` gives K_n(0) analytically.
-- `get_nm_freqs(beta, hbar, N, n=None)` returns the physical frequencies $\frac{2N}{\beta\hbar}\sin(\pi|n|/N)$, by default in the order `0, -1, +1, ...`. It tests `if n:`, so `n=0` returns *all* modes. Pass `[0]` to get the centroid alone.
-- `expohmic.py` is a CLI that is not linked in `bin/`:
-
-  ```bash
-  python -m rpmdgle.utils.fitaux.expohmic fits.csv atomic --wc 200 --wb 1000 --mass "1 amu" -T 300 -N 32 [--eta0 1] [-n 0 -1 1] [--oneaux]
-  ```
-
-  - `--wc` and `--wb` are in cm⁻¹ and `-T` is in kelvin.
-  - The static friction is `eta0·m·ω_b`, which corresponds to the `eta` of `expohmic`.
-  - Times are divided by ω_c, frequencies are multiplied by ω_c, and couplings are multiplied by $\sqrt{\eta\,\omega_c}$. The couplings therefore include the mass, following the propagator convention described under `ou`.
-  - The script prints comma-separated JSON objects, one per normal mode, with no enclosing brackets. Run it without `-n` to get all `N` modes in the order that `SepGLEaux` expects, then wrap the output in `[...]` to form the `aux` list.
-  - Columns missing from the CSV are skipped silently (by a bare `except`). This can produce empty `{}` entries.
 
 ## Testing
 
-Only `tcfs`, `special` and `arrays.index_in_slice` have direct tests. `test_arrays.py` compares `index_in_slice` with brute-force slicing of short lists. `test_special.py` compares `sinc` with `mpmath.diff` at 50 digits for `nu` ≤ 30, for real and complex x, and with the Taylor series at small |x|; it needs `mpmath`, which SymPy already depends on. The complex reference takes most of its 4 s. `test_sepgleaux.py` uses `ou.gle_cxx` as a reference, so that function is also exercised. Put new tests in `tests/utils/test_<module>.py` and keep the file name unique across `tests/` (see `tests/CLAUDE.md`). Good candidates are:
-
-- that `FFTNormalModes` and `MatMulNormalModes` agree (move the `nmtrans` `__main__` block into a test);
-- that `get_friction_spectrum` matches a `quad` cosine transform of `get_friction_kernel`;
-- the `kernel_transforms` DCT round trips on $K = e^{-t}$, $\Lambda = 1/(1+\omega^2)$.
+Only `tcfs`, `special` and `arrays.index_in_slice` have direct tests. `test_sepgleaux.py` uses `ou.gle_cxx` as a reference, so that function is also exercised. Put new tests in `tests/utils/test_<module>.py` and keep the file name unique across `tests/` (see `tests/CLAUDE.md`).

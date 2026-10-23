@@ -12,8 +12,6 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.fftpack import dct, idct
 
-__all__ = ["shift_spectral_to_kernel", "kernel_to_spectral"]
-
 def shift_spectral_to_kernel(J, UNITS, T, P, n, wmax, eps, tvec):
     """Convert the classical spectral density to the memory-friction kernel for a non-centroid normal mode.
 

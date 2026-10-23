@@ -82,7 +82,6 @@ Normal mode $n$ sees the frequency-shifted bath $J_n(\omega) = J\big(\sqrt{\omeg
   - Truncation at the end of the grid causes errors of the order of the missing tail.
   - `shift_spectral` evaluates $J_n$ on a grid.
   - None of these helpers is used in the package.
-- `__all__` lists only two of the functions, so import functions by name.
 
 ## Smaller helpers
 

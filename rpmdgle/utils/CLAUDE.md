@@ -1,6 +1,6 @@
 # CLAUDE.md — `rpmdgle/utils`
 
-Self-contained numerical helpers. `__init__.py` imports submodules lazily: a module-level `__getattr__` (PEP 562) loads a submodule on first access, so after `import rpmdgle.utils` the expression `rpmdgle.utils.ou.gle_cxx` works, but only the submodules actually used are imported. `__all__` lists the submodules and nothing else; it does not re-export functions or classes. When you add a submodule, add its name to both `__all__` and the `TYPE_CHECKING` import block, or it stays invisible to `__getattr__`, star-imports and IDEs. Explicit imports (`from rpmdgle.utils import tcfs`, `from rpmdgle.utils.ou import gle_cxx`) behave as they did before. Within the package, `rfft` and `tcfs` import `arrays`, `nmtrans` imports `rfft`, and `ou` imports `special`. Nothing here imports from the rest of `rpmdgle`, except for a lazy `rpmdgle.units` import inside `fitaux/expohmic.main`. Keep it that way: `pes`, `propagators` and `sysbath` import from `utils`, so importing them back would create cycles.
+Self-contained numerical helpers. When you add a submodule, add its name to both `__all__` and the `TYPE_CHECKING` import block.
 
 | Module | Contents | Used by |
 |---|---|---|
@@ -13,7 +13,6 @@ Self-contained numerical helpers. `__init__.py` imports submodules lazily: a mod
 | `calculus` | `GL_quad`, `FFTFourierIntegral` | `rates/rpmdrate.py` (`GL_quad`) |
 | `kde` | kernel density estimate | `rates/analyse.py` |
 | `special` | `sinc` and its derivatives, overflow-safe `logcosh` and `logsinh` | `ou.wnle_cqq` |
-| `fitaux/` | interpolation and scaling of pre-fitted auxiliary-variable parameters; CLI for `expohmic` | standalone script |
 
 ## Normal modes (`nmtrans`, `rfft`)
 
@@ -24,7 +23,7 @@ Self-contained numerical helpers. `__init__.py` imports submodules lazily: a mod
   - for even $N$, the last mode is $-N/2$, with entries $(-1)^j/N$
 
   `backward_matrix = N * forward_matrix.T`. The forward transform therefore gives the centroid as mode 0, and the backward transform inverts it exactly.
-- `nm_freqs = 2 sin(π|k|/N)` is dimensionless. Multiply it by $\omega_N = N/(\beta\hbar)$, as `RingNM.parse_mscale` does. `mats_freqs = 2|k|` is not used anywhere.
+- `nm_freqs = 2 sin(π|k|/N)` is dimensionless. Multiply it by $\omega_N = N/(\beta\hbar)$, as `RingNM.parse_mscale` does.
 - `FFTNormalModes` calls `scipy.fftpack.rfft`, whose packed output `[y0, Re y1, Im y1, Re y2, ...]` lines up with the mode order. `_norm` supplies the signs and the factor $\sqrt{2}/N$. `RealFFT.__init__` is never called. `RealFFT` reads the bead axis from `self.axis`, which `BaseNMTransform` sets, so renaming that attribute in either class breaks the FFT path.
 - With `nmodes < nbeads`, `cart2mats` keeps the first `nmodes` modes in this order, which are the lowest frequencies, and `mats2cart` pads the rest with zeros. The round trip is exact only when `nmodes == nbeads`.
 - `cart2mats(cart, mats=None)` and `mats2cart(mats, cart=None)` write into the second argument when it is given. Use this to fill preallocated propagator arrays in place. `mats2cart(..., overwrite_mats=True)` divides its input in place and leaves it rescaled.
@@ -50,10 +49,10 @@ The notation follows Ceriotti et al. (doi:10.1021/ct900563s). `Ap` is the drift 
 - `get_friction_kernel(t, Ap)` $= \theta^\mathsf{T} e^{-|t|A}\theta$.
 - `get_friction_spectrum(ω, Ap)` $= \theta^\mathsf{T} A (A^2+\omega^2)^{-1}\theta = \int_0^\infty K(t)\cos\omega t\,\mathrm{d}t$.
 
-  These two functions use the same normalisation as `Density.K` and `Density.Lambda`, so the results compare directly with a bath, as `auxplot.py` does. Each takes a scalar, which returns a float, or a 1-D array. They read only `Ap[0, 1:]` and `Ap[1:, 1:]`, and so assume `Ap[0, 0] = 0` and `Ap[1:, 0] = -θ`. `build_Ap_kantorovich` and the test fixtures produce this structure. A Markovian `Ap[0, 0]` term, or a coupling that is not antisymmetric, is ignored without warning.
+  These two functions use the same normalisation as `Density.K` and `Density.Lambda`, so the results compare directly with a bath, as `auxplot.py` does. Each takes a scalar, which returns a float, or a 1-D array. They read only `Ap[0, 1:]` and `Ap[1:, 1:]`, so they require `Ap[0, 0] = 0` and `Ap[1:, 0] = -θ`, which `build_Ap_kantorovich` and the test fixtures produce. `check_Ap_structure` enforces this in both functions, and also in `SepGLEaux.build_aux`, which likewise reads only θ and A. A non-zero `Ap[0, 0]` (Markovian friction) raises `NotImplementedError`; the test is exact. A coupling that is not antisymmetric raises `ValueError`, with relative tolerance 1e-12.
 - **Two mass conventions for `Ap`.**
-  - `SepGLEaux`, `parse_aux_spec`, `fitaux` and `auxplot.py`: $\theta^\mathsf{T} e^{-tA}\theta$ is the friction kernel *including* the mass, in the same units as `Density.K` (mass/time²).
-  - `gle_cxx`: the dynamics run in mass-weighted coordinates (`Aqp[0,1] = -1`, `Aqp[1,0] = ω²`), so $\theta$ must be per unit mass. `test_sepgleaux.py::build_Ap_s1s2` divides $\theta$ by $\sqrt{m}$ before calling `gle_cxx`. Do the same whenever you compare a propagator's `Ap` with `gle_cxx` at a mass other than 1.
+  - `SepGLEaux`, `parse_aux_spec`, and `auxplot.py`: $\theta^\mathsf{T} e^{-tA}\theta$ is the friction kernel *including* the mass, in the same units as `Density.K` (mass/time²).
+  - `gle_cxx`: the dynamics run in mass-weighted coordinates, so $\theta$ must be per unit mass. `test_sepgleaux.py::build_Ap_s1s2` divides $\theta$ by $\sqrt{m}$ before calling `gle_cxx`. Do the same whenever you compare a propagator's `Ap` with `gle_cxx` at a mass other than 1.
 - `gle_cxx(t, omega, Ap, Cp=None, C0=None, u=0, beta=None, mass=1.0)` returns $\langle v(t)\,v(u)^\mathsf{T}\rangle$ for $v = (q, p, \mathbf{s})$ of a harmonic oscillator.
   - Pass exactly one of `beta` and `Cp`. `beta` selects the canonical stationary state. `Cp` gives a general stationary covariance of $(p, \mathbf{s})$, and β is then taken as `1/Cp[0,0]`.
   - `C0` sets a non-stationary covariance at time 0. A 1×1 or 2×2 `C0` sets only the $(q, p)$ block, and the rest is filled with $\mathbb{1}/\beta$.

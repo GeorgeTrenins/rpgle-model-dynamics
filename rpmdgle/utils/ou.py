@@ -134,7 +134,30 @@ def check_matrix(
     if M.ndim != 2:
         raise RuntimeError(f"2-dimensional array expected for {name}, instead {M.ndim = }")
     if M.shape[0] != M.shape[1]:
-        raise RuntimeError(f"Square {name} expected, instead got {M.shape = }")  
+        raise RuntimeError(f"Square {name} expected, instead got {M.shape = }")
+    return
+
+def check_Ap_structure(
+        Ap : np.ndarray) -> None:
+    """
+    Check that Ap is a square matrix with no Markovian friction, Ap[0,0] = 0, and
+    antisymmetric coupling between the momentum and the auxiliary variables,
+    Ap[1:,0] = -Ap[0,1:]. This is the structure assumed by `get_friction_kernel`
+    and `get_friction_spectrum`.
+
+    Args:
+        Ap (ndarray): momentum + auxiliary variable block of the drift matrix, shape (n, n)
+
+    Raises:
+        RuntimeError: if Ap is not a square matrix
+        NotImplementedError: if Ap[0,0] != 0
+        ValueError: if Ap[1:,0] != -Ap[0,1:]
+    """
+    check_matrix(Ap, 'Ap')
+    if Ap[0,0] != 0:
+        raise NotImplementedError(f"Markovian friction Ap[0,0] = {Ap[0,0]} is not supported, only Ap[0,0] = 0.")
+    if not np.allclose(Ap[1:,0], -Ap[0,1:], rtol=1.0e-12, atol=0.0):
+        raise ValueError(f"Expected antisymmetric coupling Ap[1:,0] = -Ap[0,1:], instead got Ap[1:,0] = {Ap[1:,0]} and Ap[0,1:] = {Ap[0,1:]}.")
     return
 
 def get_Aqp(
@@ -240,6 +263,10 @@ def get_friction_kernel(
 
     Returns:
         np.ndarray: friction kernel values at the requested times
+
+    Raises:
+        NotImplementedError: if Ap[0,0] != 0
+        ValueError: if Ap[1:,0] != -Ap[0,1:]
     """
     from scipy.linalg import expm
     is_scalar = np.isscalar(t)
@@ -248,7 +275,7 @@ def get_friction_kernel(
         raise RuntimeError("t should be a one-dimensional array")
     t = np.abs(t)
     Ap = np.asarray(Ap)
-    check_matrix(Ap, 'Ap')
+    check_Ap_structure(Ap)
     theta = Ap[0,1:]
     A = Ap[1:,1:]
     kernel: np.ndarray = np.einsum(
@@ -265,15 +292,19 @@ def get_friction_spectrum(
 ) -> np.ndarray:
     """Calculate the friction spectrum for a GLE with drift matrix Ap.
     
-    Computes Λ(ω) = θᵀ A (A² + ω² I)⁻¹ θ, where θ is the first row of Ap 
+    Computes Λ(ω) = θᵀ A (A² + ω² I)⁻¹ θ, where θ is the first row of Ap
     (excluding Ap[0,0]) and A is the lower-right block Ap[1:,1:].
+
+    Raises:
+        NotImplementedError: if Ap[0,0] != 0
+        ValueError: if Ap[1:,0] != -Ap[0,1:]
     """
     is_scalar = np.isscalar(omega)
     omega = np.atleast_1d(np.asarray(omega))
     if np.ndim(omega) != 1:
         raise RuntimeError("omega should be a one-dimensional array")
     Ap = np.asarray(Ap)
-    check_matrix(Ap, 'Ap')
+    check_Ap_structure(Ap)
     theta = Ap[0,1:]
     A = Ap[1:,1:]
     lamda, Q = np.linalg.eig(A)

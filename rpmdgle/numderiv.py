@@ -106,6 +106,48 @@ def hessian(fun, x, order=2, h=1.0e-3):
         flatx[i] = xcache
     return hess
 
+def batch_jacobian(fun, x, order=2, h=1.0e-4):
+    """Approximate the derivatives of a function with respect to
+    the last axis of its argument by using central finite differences.
+    The leading axes of `x` must index independent configurations, so that
+    shifting one coordinate in every configuration at once gives the
+    derivatives for all of them from the same function calls.
+
+    Args:
+        fun (callable): maps an array of shape (..., n) to a scalar or to
+            an array of shape (...) + fshape
+        x (scalar or ndarray): configuration(s), shape (..., n)
+        order (int, optional): order of the central difference, 2 or 4.
+            Defaults to 2.
+        h (float, optional): step size. Defaults to 1.0e-4.
+
+    Returns:
+        jac (ndarray): shape (...) + fshape + (n,), where jac[..., k] is the
+            derivative with respect to x[..., k]
+    """
+    # weights c of the differences f(x + s*h) - f(x - s*h) for the shifts s;
+    # pairing the points makes the derivative of a constant exactly zero
+    if order == 2:
+        coeffs = [1/2]
+        shifts = [1]
+    elif order == 4:
+        coeffs = [2/3, -1/12]
+        shifts = [1, 2]
+    else:
+        raise ValueError(f"Expected a central difference of order 2 or 4, instead got {order}")
+    x = np.array(x, dtype=float, ndmin=1)
+    cols = []
+    for k in range(x.shape[-1]):
+        ans = 0.0
+        for coeff, shift in zip(coeffs, shifts):
+            xp = x.copy()
+            xp[...,k] += shift*h
+            xm = x.copy()
+            xm[...,k] -= shift*h
+            ans = ans + coeff*(np.asarray(fun(xp)) - np.asarray(fun(xm)))
+        cols.append(ans/h)
+    return np.stack(cols, axis=-1)
+
 ########################################
 
 def adiff2(y, x):

@@ -36,33 +36,35 @@ def main(args):
         raise ValueError("No bath coupling was specified")
     
     # Determine plotting range for frequency
-    if hasattr(SB, 'wmax'):
-        # For splined or numerical spectral densities
-        xmin = args.xmin if args.xmin is not None else 0.0
-        xmax = args.xmax if args.xmax is not None else SB.wmax*UNITS.hbar
-    elif hasattr(SB, 'omega_cut'):
-        # For exponentially damped or Debye spectral densities
-        xmin = args.xmin if args.xmin is not None else 0.0
-        xmax = args.xmax if args.xmax is not None else 5.0 * SB.omega_cut * UNITS.hbar
+    xmin = args.xmin if args.xmin is not None else 0.0
+    if args.xmax is not None:
+        xmax = args.xmax
+    elif SB.wplot is not None:
+        xmax = SB.wplot * UNITS.hbar
     else:
         # Default range
-        xmin = args.xmin if args.xmin is not None else 0.0
-        xmax = args.xmax if args.xmax is not None else 10.0
-    
+        xmax = 10.0
+
     # Generate frequency values and compute spectral density
     energy = np.linspace(xmin, xmax, args.npoints)
-    omega = energy / UNITS.hbar  
-    Lambda = SB.Lambda(omega)
-    Lambda /= np.asarray(PES.mass).item()
-    Lambda *= UNITS.str2base("1 ps")
-    omega *= UNITS.hbar
-    
+    omega = energy / UNITS.hbar
+    # convert Λ(ω) to Λ(ω)/m in ps^-1
+    Lambda_scale = UNITS.str2base("1 ps") / np.asarray(PES.mass).item()
+    Lambda = SB.Lambda(omega) * Lambda_scale
+    multiple = len(SB.densities) > 1
+    term_names = [type(density).__module__.rsplit('.', 1)[-1] for density in SB.densities]
+
     # Create the plot
     fig, ax = plt.subplots(figsize=(8, 5))
-    
+
     # Plot Lambda(omega)
-    
-    ax.plot(energy / UNITS.str2base("1 eV"), Lambda, 'b-', linewidth=1.5)
+
+    ax.plot(energy / UNITS.str2base("1 eV"), Lambda, 'b-', linewidth=1.5,
+            label='Total' if args.terms else None)
+    if args.terms:
+        for k, (density, name) in enumerate(zip(SB.densities, term_names)):
+            ax.plot(energy / UNITS.str2base("1 eV"), density.Lambda(omega) * Lambda_scale,
+                    color=f'C{k+1}', linewidth=1.0, label=f'Term {k}: {name}')
     ax.set_xlabel('Energy (eV)', fontsize=12)
     ax.set_ylabel(r'$\Lambda(\omega) / \mathrm{m} \ [ \mathrm{ps}^{-1} ]$', fontsize=12)
     ax.set_title(f'Friction Spectrum\nUnits: {UNITS.__class__.__name__}', fontsize=14)
@@ -74,16 +76,19 @@ def main(args):
     ymax = args.ymax if args.ymax is not None else Lambda.max() + ypad
     ax.set_ylim(ymin, ymax)
     
-    # Mark the discrete quadrature frequencies if requested
+    # Mark the discrete quadrature frequencies if requested, coloured by term
     if args.show_quad:
-        quad_freqs = SB.w
-        quad_energies = quad_freqs * UNITS.hbar
-        for energy in quad_energies:
-            if xmin <= energy <= xmax:
-                ax.axvline(energy / UNITS.str2base("1 eV"), color='gray', linestyle='--', alpha=0.3, linewidth=0.8)
-        # Add legend entry
-        ax.plot([], [], 'gray', linestyle='--', linewidth=0.8, 
-                label=f'Quadrature points (N={SB.Nmodes})')
+        for k, sl in enumerate(SB.term_slices):
+            color = f'C{k+1}' if multiple else 'gray'
+            quad_energies = SB.w[sl] * UNITS.hbar
+            for quad_energy in quad_energies:
+                if xmin <= quad_energy <= xmax:
+                    ax.axvline(quad_energy / UNITS.str2base("1 eV"), color=color, linestyle='--', alpha=0.3, linewidth=0.8)
+            # Add legend entry
+            label = f'Quadrature points (N={SB.Nmodes})' if not multiple else \
+                f'Quadrature points, term {k} (N={sl.stop - sl.start})'
+            ax.plot([], [], color=color, linestyle='--', linewidth=0.8, label=label)
+    if args.show_quad or args.terms:
         ax.legend(loc='upper right')
     
     plt.tight_layout()
@@ -142,6 +147,11 @@ if __name__ == "__main__":
         '--show-quad',
         action='store_true',
         help="Show discrete quadrature frequencies as vertical lines"
+    )
+    parser.add_argument(
+        '--terms',
+        action='store_true',
+        help="Also plot each term of a bath that is a sum of spectral densities"
     )
     
     args = parser.parse_args()

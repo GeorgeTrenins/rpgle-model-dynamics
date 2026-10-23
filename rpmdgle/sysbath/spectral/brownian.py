@@ -10,7 +10,6 @@
 
 from __future__ import print_function, division, absolute_import
 from rpmdgle.sysbath.spectral._base import BaseSpectralDensity
-from rpmdgle.pes._base import BasePES
 import numpy as np
 from typing import Union
 
@@ -18,12 +17,9 @@ from typing import Union
 class Density(BaseSpectralDensity):
 
     def __init__(self,
-                 PES: BasePES,
-                 Nmodes: int,
                  eta: float,
                  omega0: float,
-                 gamma: float,
-                 *args, **kwargs) -> None:
+                 gamma: float) -> None:
         """Brownian-oscillator spectral density, Garg et al. (1985), https://doi.org/10.1063/1.449017
 
             J(ω) = η ω ω0⁴ / [(ω² - ω0²)² + γ² ω²]
@@ -32,8 +28,6 @@ class Density(BaseSpectralDensity):
         that is itself damped by Ohmic friction with rate γ.
 
         Args:
-            PES (object): child of BasePES
-            Nmodes (int): number of bath modes
             eta (float): static friction, Λ(0)
             omega0 (float): undamped frequency of the oscillator mode
             gamma (float): damping rate of the oscillator mode; the mode is
@@ -57,8 +51,7 @@ class Density(BaseSpectralDensity):
         else:
             self._regime = 'critical'
         # default plotting range used by visualisation/bathplot.py
-        self.wmax = self._invert_cdf([0.95])[0]
-        super().__init__(PES, Nmodes, *args, **kwargs)
+        self.wplot = self._invert_cdf([0.95])[0]
 
     def J(self, omega: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """Spectral density at frequency omega.
@@ -148,11 +141,11 @@ class Density(BaseSpectralDensity):
             prev = ans.root
         return np.asarray(freqs)
 
-    def quadpoints(self) -> np.ndarray:
+    def quadpoints(self, Nmodes: int) -> np.ndarray:
         """Calculate the discrete frequencies according to https://doi.org/10.1002/jcc.24527
         """
         return self._invert_cdf(
-            (np.arange(1, self.Nmodes+1) - 1/2) / self.Nmodes
+            (np.arange(1, Nmodes+1) - 1/2) / Nmodes
         )
 
     def exact_reorganisation(self) -> float:

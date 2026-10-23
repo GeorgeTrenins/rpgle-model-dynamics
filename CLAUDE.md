@@ -35,8 +35,8 @@ All parsers use `MyArgumentParser`, so `+args.txt` reads arguments from a file w
 All inputs are JSON. The README examples contain `//` comments for explanation only; real input files must be plain JSON.
 
 - **PES** (`-P`): `{"module": "rpmdgle.pes.polynomial", "name": "PES", ...constructor kwargs}`. `system.get_PES` imports the module dynamically.
-- **Bath** (`--bath`): `{"name": "expohmic", "Nmodes": 64, ...}`. `name` is a submodule of `rpmdgle.sysbath.spectral`, and the class used is always `Density`.
-- **Coupling** (`--coupling`): `{"name": "linear" | "exptanh" | "splined", ...}`. The class used is always `Coupling` in `rpmdgle.sysbath.coupling.<name>`. It defaults to linear when the file is omitted.
+- **Bath** (`--bath`): `{"name": "expohmic", "Nmodes": 64, ...}` for one spectral density, or `{"terms": [{"name": ..., "Nmodes": ..., ...}, ...]}` for a sum of them. `name` is a submodule of `rpmdgle.sysbath.spectral`, and the class used is always `Density`. Each term is discretised with its own `Nmodes`. `rpmdgle/sysbath/spectral/CLAUDE.md` gives the full rules.
+- **Coupling** (`--coupling`): `{"name": "linear" | "exptanh" | "splined", ...}`. The class used is always `Coupling` in `rpmdgle.sysbath.coupling.<name>`. It defaults to linear when the file is omitted. `UNITS` follows the same rule as in the bath JSON.
 - **Propagator** (`--propa` etc.): `{"class": "<name exported from rpmdgle.propagators>", "dt": "0.25 fs", ...kwargs}`. The README documents each class's options, including the `aux` drift-matrix spec for `SepGLEaux`.
 - **Properties** (`--properties`): a list of `{"name": <output file stem>, "A": <property id>, "stride": "<time>", "postA": "<python lambda string>"}`. `postA` is `eval`'d. Valid ids are listed in `rpmdgle/properties.py`.
 
@@ -44,7 +44,7 @@ All inputs are JSON. The README examples contain `//` comments for explanation o
 
 ### Units
 
-Every PES carries a `UNITS` object, an instance of a class in `rpmdgle/units.py` (`atomic` by default; also `hartAng`, `kcalAfs`, `eVAamu`, and others). The class is built on SymPy units. Time and other dimensional inputs may be strings such as `"100 fs"`, which `UNITS.str2base` converts to internal units. Bare numbers are taken to be in internal units already. Spectral densities and couplings take `UNITS` as a class-name string, and raise if it does not match the PES.
+Every PES carries a `UNITS` object, an instance of a class in `rpmdgle/units.py` (`atomic` by default; also `hartAng`, `kcalAfs`, `eVAamu`, and others). The class is built on SymPy units. Time and other dimensional inputs may be strings such as `"100 fs"`, which `UNITS.str2base` converts to internal units. Bare numbers are taken to be in internal units already. In the bath and coupling JSON, `UNITS` is optional, defaults to the PES's unit system, and must match it if given. The coupling classes take `UNITS` as a class-name string, which `system.get_bath_coupling` sets from the PES, so that a coupling parameter such as `"delta": "0.5 angstrom"` is converted to the PES's units. `CaldeiraLeggett` raises if a coupling built in Python has a different unit system.
 
 ### Array layout
 
@@ -56,16 +56,16 @@ Everything is vectorised over independent replicas. Configuration arrays have sh
 
 ### PES layers
 
-- `pes/_base.BasePES` is the interface: `potential`, `gradient`, `hessian`, `force`, `both`, `all`. Gradients and Hessians fall back to finite differences.
+- `pes/_base.BasePES` is the interface: `potential`, `gradient`, `hessian`, `force`, `both`, `all`. Gradients and Hessians fall back to fourth-order central differences from `numderiv.batch_jacobian`, which differentiates along the last axis and treats the leading axes as independent configurations. The gradient differences `potential` with step `gradh`. The Hessian differences `gradient` (analytic wherever a subclass defines it) with step `hessh`, symmetrises the result.
 - `pes/pi.Ring` wraps a physical PES into a ring polymer. `BasePI.__getattr__` synthesises `potential`, `gradient` and the other methods as `polymer_*` + `external_*`. Propagators often call `external_both` and `polymer_potential` separately.
-- `sysbath/spectral/*.Density` is itself a `BasePES`. It wraps the system PES plus `Nmodes` discretised harmonic bath modes into the full Caldeira–Leggett potential, and also exposes the bath parameters `c`, `w`, `bath_mass` and the coupling `F(q)`.
+- `sysbath/bath.CaldeiraLeggett` is a `BasePES`. It wraps the system PES plus `Nmodes` discretised harmonic bath modes into the full Caldeira–Leggett potential, and also exposes the bath parameters `c`, `w`, `bath_mass` and the coupling `F(q)`. Its spectral density is a sum of one or more terms, each a `sysbath/spectral/*.Density` (the continuous J(ω) alone) discretised into its own block of modes. All terms share the coupling.
 
 ### Two ways to represent dissipation
 
 `qtst.make_propa` dispatches on the propagator class:
 
-1. **Explicit bath**: `VelocityVerlet`, `RingNM`, `RingPILE`, `Langevin` and `SVR` propagate the full Caldeira–Leggett `Density` ring-polymerised with `xshape = (1+Nmodes,)`.
-2. **Implicit bath**: `SepGLEPILE` and `SepGLEaux` propagate only the system ring polymer, `xshape = (1,)`. They take the `Density` object separately to build the potential of mean field (PMF) from coupling to the bath (`build_pmf`). `SepGLEPILE` adds only the PMF and thermostats with fictitious PILE friction, so it is for sampling. `SepGLEaux` adds the true memory friction and noise through auxiliary variables (`saux`), with one `Ap` drift matrix per normal mode, following Ceriotti's GLE conventions (doi:10.1021/ct900563s). `Ap` can come from a Kantorovich parametrisation, an inline matrix, or an external JSON file; see `parse_aux_spec`.
+1. **Explicit bath**: `VelocityVerlet`, `RingNM`, `RingPILE`, `Langevin` and `SVR` propagate the full `CaldeiraLeggett` potential ring-polymerised with `xshape = (1+Nmodes,)`.
+2. **Implicit bath**: `SepGLEPILE` and `SepGLEaux` propagate only the system ring polymer, `xshape = (1,)`. They take the `CaldeiraLeggett` object separately to build the potential of mean field (PMF) from coupling to the bath (`build_pmf`). `SepGLEPILE` adds only the PMF and thermostats with fictitious PILE friction, so it is for sampling. `SepGLEaux` adds the true memory friction and noise through auxiliary variables (`saux`), with one `Ap` drift matrix per normal mode, following Ceriotti's GLE conventions (doi:10.1021/ct900563s). `Ap` can come from a Kantorovich parametrisation, an inline matrix, or an external JSON file; see `parse_aux_spec`.
 
 ### Propagator conventions (`propagators/`)
 

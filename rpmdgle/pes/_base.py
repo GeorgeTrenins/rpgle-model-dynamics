@@ -36,6 +36,8 @@ class BasePES(object):
     """Base class upon which all other PESs should be based.
     By default, gradients and hessians are computed by finite differences
     and "both" and "all" functions simply call the separate routines.
+    The finite differences are taken along the last axis of the input, and
+    the leading axes are treated as independent configurations.
     """
 
     mass = None
@@ -47,10 +49,12 @@ class BasePES(object):
         return None
 
     def gradient(self, x):
-        return numderiv.grad2(x, self.potential, self.gradh)
+        return numderiv.batch_jacobian(self.potential, x, order=4, h=self.gradh)
 
     def hessian(self, x):
-        return numderiv.hess2(x, self.potential, self.hessh)
+        # differentiate the gradient, which is analytic where a subclass defines it
+        H = numderiv.batch_jacobian(self.gradient, x, order=4, h=self.hessh)
+        return (H + np.swapaxes(H, -1, -2)) / 2
 
     def force(self, x):
         return -self.gradient(x)

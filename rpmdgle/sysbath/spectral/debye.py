@@ -10,21 +10,26 @@
 
 from __future__ import print_function, division, absolute_import
 from rpmdgle.sysbath.spectral._base import BaseSpectralDensity
-from rpmdgle.pes._base import BasePES
 import numpy as np
 from typing import Union
 
 
 class Density(BaseSpectralDensity):
-    def __init__(self, 
-                 PES: BasePES, 
-                 Nmodes: int,
-                 eta: float, 
-                 omega_cut: float, 
-                 *args, **kwargs) -> None:
+    def __init__(self,
+                 eta: float,
+                 omega_cut: float) -> None:
+        """Debye spectral density,
+
+            J(ω) = η ω ω_c² / (ω² + ω_c²)
+
+        Args:
+            eta (float): static friction, Λ(0)
+            omega_cut (float): cutoff frequency
+        """
         self.eta = eta
         self.omega_cut = omega_cut
-        super().__init__(PES, Nmodes, *args, **kwargs)
+        # default plotting range used by visualisation/bathplot.py
+        self.wplot = 5*omega_cut
 
     def J(self, omega: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
         """Spectral density at frequency omega.
@@ -46,11 +51,11 @@ class Density(BaseSpectralDensity):
         """
         return self.eta * self.omega_cut * np.exp(-self.omega_cut*np.abs(t))
     
-    def quadpoints(self) -> np.ndarray:
+    def quadpoints(self, Nmodes: int) -> np.ndarray:
         """Calculate the discrete frequencies according to https://doi.org/10.1002/jcc.24527
         """
         return self.omega_cut * np.tan(
-            np.pi * (2*np.arange(1, self.Nmodes+1) - 1) / (4*self.Nmodes)
+            np.pi * (2*np.arange(1, Nmodes+1) - 1) / (4*Nmodes)
         )
     
     def exact_reorganisation(self) -> float:

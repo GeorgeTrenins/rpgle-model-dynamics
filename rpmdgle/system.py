@@ -26,27 +26,50 @@ def get_PES(kwargs):
     PES: BasePES = getattr(pesmod, pesname)(**kwargs)
     return PES, PES.UNITS
 
-def get_bath_coupling(PES, coupling_data):
-    """construct the system-bath coupling potential, if specified. If not specified, returns the default linear coupling."""
-    if coupling_data is None:
-        return coupling.linear.Coupling(UNITS=PES.UNITS.__class__.__name__)
-    coupling_data = dict(coupling_data)
-    coupling_name = coupling_data.pop("name")
-    F = getattr(coupling, coupling_name).Coupling(**coupling_data)
-    return F
-
-def _check_units(PES: BasePES, UNITS: Optional[str]) -> None:
-    """Raise if a unit system named in the bath specification differs from that of the PES."""
+def _check_units(PES: BasePES, UNITS: Optional[str], what: str) -> None:
+    """Raise if a unit system named in the specification of `what` differs from that of the PES."""
     expected = PES.UNITS.__class__.__name__
     if UNITS is not None and UNITS != expected:
         raise RuntimeError(
-            "The spectral density and the potential appear to have "
+            f"The {what} and the potential appear to have "
             f"different unit systems, {UNITS} and {expected}, respectively")
 
-def _spectral_density_names() -> List[str]:
-    """Names of the spectral densities that can be selected in the bath specification."""
-    return sorted(name for name, obj in vars(spectral).items()
+def _submodule_names(package: ModuleType) -> List[str]:
+    """Names of the public submodules of `package` that can be selected by "name" in a specification."""
+    return sorted(name for name, obj in vars(package).items()
                   if isinstance(obj, ModuleType) and not name.startswith("_"))
+
+def get_bath_coupling(PES, coupling_data):
+    """construct the system-bath coupling potential, if specified. If not specified,
+    returns the default linear coupling. A coupling is specified by a dictionary such as
+
+        {"name": "exptanh", "eps1": -1.0, "delta": "0.5 angstrom"}
+
+    "name" selects a submodule of rpmdgle.sysbath.coupling, and the remaining keys are
+    passed to the constructor of its Coupling. "UNITS" is optional and must match the
+    unit system of the PES, which is passed to the constructor.
+
+    Args:
+        PES (BasePES): system potential
+        coupling_data (dict or None): coupling specification; it is not modified
+    """
+    units_name = PES.UNITS.__class__.__name__
+    if coupling_data is None:
+        return coupling.linear.Coupling(UNITS=units_name)
+    if not isinstance(coupling_data, dict):
+        raise TypeError(f"Expected the coupling to be specified by a JSON object, instead got {type(coupling_data).__name__}")
+    if "name" not in coupling_data:
+        raise ValueError("A coupling requires the key 'name'")
+    spec = dict(coupling_data)
+    name = spec.pop("name")
+    if name not in _submodule_names(coupling):
+        raise ValueError(f"Unknown coupling {name!r}; expected one of {_submodule_names(coupling)}")
+    _check_units(PES, spec.pop("UNITS", None), "coupling")
+    try:
+        return getattr(coupling, name).Coupling(UNITS=units_name, **spec)
+    except Exception as e:
+        e.add_note(f"Raised while constructing the coupling ({name!r})")
+        raise
 
 def _get_bath_term(PES: BasePES, term: dict) -> Tuple[BaseSpectralDensity, int]:
     """Construct one spectral density from its specification, which is consumed in the process."""
@@ -63,9 +86,9 @@ def _get_bath_term(PES: BasePES, term: dict) -> Tuple[BaseSpectralDensity, int]:
             raise ValueError(f"A spectral density requires the key '{key}'")
     name = term.pop("name")
     Nmodes = term.pop("Nmodes")
-    _check_units(PES, term.pop("UNITS", None))
-    if name not in _spectral_density_names():
-        raise ValueError(f"Unknown spectral density {name!r}; expected one of {_spectral_density_names()}")
+    _check_units(PES, term.pop("UNITS", None), "spectral density")
+    if name not in _submodule_names(spectral):
+        raise ValueError(f"Unknown spectral density {name!r}; expected one of {_submodule_names(spectral)}")
     return getattr(spectral, name).Density(**term), Nmodes
 
 def get_bath_terms(PES: BasePES, bath_data: dict) -> List[Tuple[BaseSpectralDensity, int]]:
@@ -103,7 +126,7 @@ def get_bath_terms(PES: BasePES, bath_data: dict) -> List[Tuple[BaseSpectralDens
                 "specify a coupling shared by all terms with --coupling")
         if "Nmodes" in spec:
             raise ValueError("Specify 'Nmodes' in each of the bath 'terms', not for the bath as a whole")
-        _check_units(PES, spec.pop("UNITS", None))
+        _check_units(PES, spec.pop("UNITS", None), "spectral density")
         if spec:
             raise ValueError(f"Unknown keys in the bath specification: {sorted(spec)}")
         if not isinstance(term_specs, list) or len(term_specs) == 0:

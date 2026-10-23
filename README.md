@@ -32,7 +32,7 @@ A spectral density that is a sum of several terms lists them under `terms`. Each
 }
 ```
 
-All terms couple to the system through the same function, which is linear unless a coupling file is given with `--coupling`. An optional `"UNITS"` key must match the unit system of the PES.
+All terms couple to the system through the same function, which is linear unless a coupling file is given with `--coupling`. An optional `"UNITS"` key, in the bath file or in the coupling file, must match the unit system of the PES; without it, both use the unit system of the PES.
 
 ### Propagator
 

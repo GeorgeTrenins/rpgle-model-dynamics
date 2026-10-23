@@ -36,7 +36,7 @@ All inputs are JSON. The README examples contain `//` comments for explanation o
 
 - **PES** (`-P`): `{"module": "rpmdgle.pes.polynomial", "name": "PES", ...constructor kwargs}`. `system.get_PES` imports the module dynamically.
 - **Bath** (`--bath`): `{"name": "expohmic", "Nmodes": 64, ...}` for one spectral density, or `{"terms": [{"name": ..., "Nmodes": ..., ...}, ...]}` for a sum of them. `name` is a submodule of `rpmdgle.sysbath.spectral`, and the class used is always `Density`. Each term is discretised with its own `Nmodes`. `rpmdgle/sysbath/spectral/CLAUDE.md` gives the full rules.
-- **Coupling** (`--coupling`): `{"name": "linear" | "exptanh" | "splined", ...}`. The class used is always `Coupling` in `rpmdgle.sysbath.coupling.<name>`. It defaults to linear when the file is omitted.
+- **Coupling** (`--coupling`): `{"name": "linear" | "exptanh" | "splined", ...}`. The class used is always `Coupling` in `rpmdgle.sysbath.coupling.<name>`. It defaults to linear when the file is omitted. `UNITS` follows the same rule as in the bath JSON.
 - **Propagator** (`--propa` etc.): `{"class": "<name exported from rpmdgle.propagators>", "dt": "0.25 fs", ...kwargs}`. The README documents each class's options, including the `aux` drift-matrix spec for `SepGLEaux`.
 - **Properties** (`--properties`): a list of `{"name": <output file stem>, "A": <property id>, "stride": "<time>", "postA": "<python lambda string>"}`. `postA` is `eval`'d. Valid ids are listed in `rpmdgle/properties.py`.
 
@@ -44,7 +44,7 @@ All inputs are JSON. The README examples contain `//` comments for explanation o
 
 ### Units
 
-Every PES carries a `UNITS` object, an instance of a class in `rpmdgle/units.py` (`atomic` by default; also `hartAng`, `kcalAfs`, `eVAamu`, and others). The class is built on SymPy units. Time and other dimensional inputs may be strings such as `"100 fs"`, which `UNITS.str2base` converts to internal units. Bare numbers are taken to be in internal units already. Couplings take `UNITS` as a class-name string, and the bath raises if it does not match the PES. A `UNITS` key in the bath JSON is optional and defaults to the PES's unit system.
+Every PES carries a `UNITS` object, an instance of a class in `rpmdgle/units.py` (`atomic` by default; also `hartAng`, `kcalAfs`, `eVAamu`, and others). The class is built on SymPy units. Time and other dimensional inputs may be strings such as `"100 fs"`, which `UNITS.str2base` converts to internal units. Bare numbers are taken to be in internal units already. In the bath and coupling JSON, `UNITS` is optional, defaults to the PES's unit system, and must match it if given. The coupling classes take `UNITS` as a class-name string, which `system.get_bath_coupling` sets from the PES, so that a coupling parameter such as `"delta": "0.5 angstrom"` is converted to the PES's units. `CaldeiraLeggett` raises if a coupling built in Python has a different unit system.
 
 ### Array layout
 

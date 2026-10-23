@@ -62,7 +62,7 @@ def test_shared_coupling():
 
 def test_inputs_not_modified():
     bath_data = {"UNITS": "atomic", "terms": [EXPOHMIC, BROWNIAN]}
-    F_data = {"name": "exptanh", "eps1": -0.5}
+    F_data = {"name": "exptanh", "eps1": -0.5, "UNITS": "atomic"}
     bath_copy, F_copy = copy.deepcopy(bath_data), copy.deepcopy(F_data)
     for _ in range(2):
         get_bath(make_pes(), bath_data, F_data)
@@ -127,3 +127,47 @@ def test_error_names_term():
     with pytest.raises(TypeError) as excinfo:
         get_bath(make_pes(), bath_data, None)
     assert "bath term 1 ('brownian')" in "\n".join(excinfo.value.__notes__)
+
+
+GRID = np.linspace(-3.0, 3.0, 31)
+COUPLINGS = {
+    "linear": {"name": "linear"},
+    "exptanh": {"name": "exptanh", "eps1": -0.5, "eps2": 0.3, "delta": 1.2},
+    "splined": {"name": "splined", "x": GRID.tolist(), "y": np.cos(GRID).tolist()},
+}
+
+
+@pytest.mark.parametrize("F_data", list(COUPLINGS.values()), ids=list(COUPLINGS))
+def test_coupling_units_from_pes(F_data):
+    for spec in (F_data, {**F_data, "UNITS": "kcalAfs"}):
+        SB = get_bath(make_pes("kcalAfs"), EXPOHMIC, spec)
+        assert SB.coupling.UNITS.__class__.__name__ == "kcalAfs"
+
+
+@pytest.mark.parametrize("UNITS, delta", [("kcalAfs", 1.0), ("atomic", 1/0.529177210903)])
+def test_coupling_unit_strings(UNITS, delta):
+    """Strings with units are converted to the internal units of the PES"""
+    SB = get_bath(make_pes(UNITS), EXPOHMIC, {"name": "exptanh", "delta": "1 angstrom"})
+    assert SB.coupling.delta == pytest.approx(delta, rel=1e-6, abs=0)
+
+
+def test_coupling_units_mismatch():
+    with pytest.raises(RuntimeError, match="coupling"):
+        get_bath(make_pes(), EXPOHMIC, {"name": "linear", "UNITS": "kcalAfs"})
+
+
+@pytest.mark.parametrize("F_data, error", [
+    ({"name": "lineer"}, ValueError),
+    ({"eps1": -0.5}, ValueError),
+    ([{"name": "linear"}], TypeError),
+    ({"name": "exptanh", "epsilon1": -0.5}, TypeError),
+], ids=["unknown-name", "missing-name", "not-object", "unknown-parameter"])
+def test_invalid_coupling_spec(F_data, error):
+    with pytest.raises(error):
+        get_bath(make_pes(), EXPOHMIC, F_data)
+
+
+def test_error_names_coupling():
+    with pytest.raises(TypeError) as excinfo:
+        get_bath(make_pes(), EXPOHMIC, {"name": "exptanh", "epsilon1": -0.5})
+    assert "the coupling ('exptanh')" in "\n".join(excinfo.value.__notes__)

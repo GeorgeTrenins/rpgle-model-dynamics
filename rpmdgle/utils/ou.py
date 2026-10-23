@@ -15,33 +15,49 @@ def wnle_cqq(
         beta: float,
         omega: float,
         tau: float,
-        m: Optional[float] = 1):
+        m: float = 1):
     """
     Position auto-correlation function for a harmonic oscillator at thermal equilibrium,
-    under the action of a white-noise Langevin equation thermostat (WNLE).
+    under the action of a white-noise Langevin equation thermostat (WNLE),
+
+        <q(t) q(0)> = exp(-γ|t|/2) [cos(ω̄|t|) + γ/(2ω̄) sin(ω̄|t|)] / (β m ω²)
+
+    with γ = 1/τ and ω̄ = sqrt(ω² - γ²/4). For γ > 2ω, cos and sin become cosh
+    and sinh of κt, with κ = sqrt(γ²/4 - ω²); this branch is evaluated
+    as a sum of decaying exponentials to avoid overflow at long times. For
+    γ = 2ω, the bracket is 1 + γ|t|/2.
 
     Args:
-        t (float or ndarray): time(s) for which to compute the covariance matrix
+        t (float or ndarray): time(s) at which to evaluate the correlation function
         beta (float): reciprocal temperature, 1/kB*T
         omega (float): frequency of the harmonic oscillator
         tau (float): reciprocal of the friction, tau = 1/gamma
         m (float, optional): mass of the harmonic oscillator
 
     Returns:
-        ndarray: covariance matrix
+        float or ndarray: position auto-correlation function at time(s) t
     """
-    Omega = np.sqrt(np.abs(omega**2 - 1/(2*tau)**2))
-    eps = 1.0e-4
-    test = omega*tau - 0.5
-    if test > eps:
-        ans = np.exp(-t/(2*tau)) * (np.cos(Omega*t) + np.sin(Omega*t) / (2*Omega*tau))
-    elif test < eps:
-        from rpmdgle.utils.special import logcosh, logsinh
-        ans = np.exp(-t/(2*tau) + logcosh(Omega*t))
-        ans += np.exp(-t/(2*tau) + logsinh(Omega*t).real) / (2*Omega*tau)
+    for name, value in zip(('beta', 'omega', 'tau', 'm'), (beta, omega, tau, m)):
+        if not value > 0:
+            raise ValueError(f"Expected a positive value for {name}, instead got {value}")
+    t = np.abs(t)
+    gamma = 1/tau
+    prefactor = 1 / (beta * m * omega**2)
+    # s = ω̄², where ω̄ is the damped frequency of the oscillator
+    s = omega**2 - gamma**2/4
+    if s > 0:
+        wbar = np.sqrt(s)
+        return prefactor * np.exp(-gamma*t/2) * (
+            np.cos(wbar*t) +
+            gamma/(2*wbar) * np.sin(wbar*t))
+    elif s < 0:
+        kappa = np.sqrt(-s)
+        rate = omega**2 / (gamma/2 + kappa)
+        return prefactor * np.exp(-rate*t) * (
+            (1 + np.exp(-2*kappa*t))/2 -
+            gamma/(4*kappa) * np.expm1(-2*kappa*t))
     else:
-        ans = np.exp(-t/(2*tau)) * (1 + t/(2*tau))
-    return ans / (beta * m * omega**2)
+        return prefactor * np.exp(-gamma*t/2) * (1 + gamma*t/2)
 
 def gle_cxx(
         t: Union[float, np.ndarray], 
@@ -49,43 +65,62 @@ def gle_cxx(
         Ap: Union[float, np.ndarray],
         Cp: Optional[Union[float, np.ndarray]] = None,
         C0: Optional[Union[float, np.ndarray]] = None,
-        u: Optional[Union[float, np.ndarray]] = 0,
+        u: Union[float, np.ndarray] = 0,
         beta: Optional[float] = None,
         mass: Optional[float] = 1.0) -> np.ndarray:
     """
-    Calculate the covariance matrix <v(t) v(0)^T> where v(t) = (q, p, s^T) are the
+    Calculate the covariance matrix <v(t) v(u)^T> where v(t) = (q, p, s^T) are the
     position and momentum of a harmonic oscillator plus the auxiliary variable coordinates.
-    See https://doi.org/10.1021/ct900563s for notation.
+    See https://doi.org/10.1021/ct900563s for notation. With A the drift matrix for v and
+    C the stationary covariance matrix,
+
+        <v(t) v(u)^T> = exp(-A t) (C0 - C) exp(-A^T u) + exp(-A (t-u)) C,    t >= u,
+        <v(t) v(u)^T> = exp(-A t) (C0 - C) exp(-A^T u) + C exp(-A^T (u-t)),  t < u,
+
+    where the second line is the transpose of the first with t and u exchanged. Without C0
+    the process is stationary, the first term vanishes, and t and u may take any real value.
+    With C0 the process starts at time 0, and t and u must be non-negative.
 
     Args:
-        t (float or ndarray): time(s) for which to compute the covariance matrix
+        t (float or ndarray): first time argument; a scalar, a 1-D array, or a 2-D array, whose columns correspond to the elements of a 1-D `u`
         omega (float): frequency of the harmonic oscillator
         Ap (ndarray): momentum + auxiliary variable block of the drift matrix, for dynamics expressed in mass-weighted coordinates
         Cp (ndarray, optional): stationary covariance matrix for the momentum + auxvar subsystem in the absence of an external potential (mass-weighted coordinates); allows specifyng a non-thermal distribution
-        C0 (ndarray, optional): covariance matrix at time 0, in mass-weighted coordinates
-        u (float or ndarray, optional): second time variable for cross-correlation, to calculate <v(t) v(u)^T>
+        C0 (ndarray, optional): covariance matrix at time 0, in mass-weighted coordinates. Defaults to None, for the stationary process
+        u (float or ndarray, optional): second time argument; a scalar or a 1-D array. Defaults to 0
         beta (float, optional): reciprocal temperature, 1/kB*T
         mass (float, optional): mass of the harmonic oscillator
 
     Returns:
-        ndarray: covariance matrix
+        ndarray: covariance matrices of shape S + (n+1, n+1), where n = Ap.shape[0] and
+            S = (len(t), len(u)) if both are 1-D, otherwise S = np.broadcast_shapes(t.shape, u.shape).
+
+    Notes:
+        output[..., i, j] = <v_i(t') v_j(u')>, where the times t' and u' are taken from `t` and `u` as follows:
+
+            t           u        element              t'         u'
+            scalar      scalar   output[i, j]         t          u
+            (nt,)       scalar   output[k, i, j]      t[k]       u
+            (mt, nt)    scalar   output[l, k, i, j]   t[l, k]    u
+            scalar      (nu,)    output[l, i, j]      t          u[l]
+            (nt,)       (nu,)    output[l, k, i, j]   t[l]       u[k]
+            (nt, nu)    (nu,)    output[l, k, i, j]   t[l, k]    u[k]
     """
     from scipy.linalg import expm
-    t = np.asarray(t)
-    if t.ndim == 1:
-        t = np.reshape(t, (1,-1,1,1)) 
-    elif t.ndim == 2:
-        t = t[...,None,None]
-    else:
-        raise RuntimeError('t should either be a one- or two-dimensional array')
-    if np.any(t < 0):
-        raise RuntimeError("Can only request positive times!")
-    u = np.atleast_1d(u)
-    if u.ndim != 1:
+    t = np.asarray(t, dtype=float)
+    if t.ndim > 2:
+        raise RuntimeError('t should be a scalar, or a one- or two-dimensional array')
+    u = np.asarray(u, dtype=float)
+    if u.ndim > 1:
         raise RuntimeError('u should be a scalar or a one-dimensional array')
-    u = np.reshape(u, (-1,1,1,1))
-    if np.any(u < 0):
-        raise RuntimeError("Can only request positive times!")
+    if C0 is not None and (np.any(t < 0) or np.any(u < 0)):
+        raise RuntimeError("Negative times are only allowed for the stationary process, C0 = None.")
+    if t.ndim == 1 and u.ndim == 1:
+        # outer product: t varies along the leading axis of the output, u along the trailing axis
+        t = t[:,None]
+    # trailing axes for the matrix dimensions
+    t = t[...,None,None]
+    u = u[...,None,None]
     if (beta is None and Cp is None) or (beta is not None and Cp is not None):
         raise RuntimeError("Specify either beta (for detailed balance) or Cp (for a general thermostat), not both.")
     Ap = np.atleast_2d(Ap)
@@ -112,14 +147,17 @@ def gle_cxx(
         else:
             C0[:,:] = C0_
         term0 = expm(-A_qp * t) @ (C0 - C_qp) @ expm(-np.transpose(A_qp) * u)
-    term1 = expm(-A_qp * np.abs(t - u)) @ C_qp
+    # stationary part: exp(-A (t-u)) C for t >= u, and its transpose C exp(-A^T (u-t)) for t < u
+    tau = t - u
+    term1 = expm(-A_qp * np.abs(tau)) @ C_qp
+    term1 = np.where(tau >= 0, term1, np.swapaxes(term1, -1, -2))
     tcf = term0 + term1
-    sqm = np.sqrt(mass) # rescaling for mass != 1 
+    sqm = np.sqrt(mass) # rescaling for mass != 1
     sqmvec = np.ones(n+1)
     sqmvec[0] = 1/sqm
     sqmvec[1] = sqm
     sqmmat = sqmvec[:,None] * sqmvec[None,:]
-    return np.squeeze(tcf * sqmmat)
+    return tcf * sqmmat
 
 def check_matrix(
         M : Union[float, np.ndarray],
@@ -134,7 +172,30 @@ def check_matrix(
     if M.ndim != 2:
         raise RuntimeError(f"2-dimensional array expected for {name}, instead {M.ndim = }")
     if M.shape[0] != M.shape[1]:
-        raise RuntimeError(f"Square {name} expected, instead got {M.shape = }")  
+        raise RuntimeError(f"Square {name} expected, instead got {M.shape = }")
+    return
+
+def check_Ap_structure(
+        Ap : np.ndarray) -> None:
+    """
+    Check that Ap is a square matrix with no Markovian friction, Ap[0,0] = 0, and
+    antisymmetric coupling between the momentum and the auxiliary variables,
+    Ap[1:,0] = -Ap[0,1:]. This is the structure assumed by `get_friction_kernel`
+    and `get_friction_spectrum`.
+
+    Args:
+        Ap (ndarray): momentum + auxiliary variable block of the drift matrix, shape (n, n)
+
+    Raises:
+        RuntimeError: if Ap is not a square matrix
+        NotImplementedError: if Ap[0,0] != 0
+        ValueError: if Ap[1:,0] != -Ap[0,1:]
+    """
+    check_matrix(Ap, 'Ap')
+    if Ap[0,0] != 0:
+        raise NotImplementedError(f"Markovian friction Ap[0,0] = {Ap[0,0]} is not supported, only Ap[0,0] = 0.")
+    if not np.allclose(Ap[1:,0], -Ap[0,1:], rtol=1.0e-12, atol=0.0):
+        raise ValueError(f"Expected antisymmetric coupling Ap[1:,0] = -Ap[0,1:], instead got Ap[1:,0] = {Ap[1:,0]} and Ap[0,1:] = {Ap[0,1:]}.")
     return
 
 def get_Aqp(
@@ -201,8 +262,7 @@ def get_Cqp(
         Aqp : Union[float, np.ndarray], 
         Dqp : Union[float, np.ndarray]) -> np.ndarray:
     """
-    Compute the stationary covariance matrix for mass-weighted variables that solves
-    Aqp Cqp + Cqp Aqp^T = Dqp.
+    Compute the stationary covariance matrix for mass-weighted variables that solves the Lyapunov equation Aqp Cqp + Cqp Aqp^T = Dqp. The solution is symmetrised to remove rounding-level asymmetry.
 
     Args:
         Aqp (ndarray): full drift matrix, shape (n+1, n+1)
@@ -210,23 +270,20 @@ def get_Cqp(
 
     Returns:
         ndarray: stationary covariance matrix, shape (n+1, n+1)
+
+    Raises:
+        ValueError: if two eigenvalues of Aqp sum to (nearly) zero, 
+        so that the process has no well-defined stationary covariance
     """
-    import scipy.linalg as sclin
-    eigs, O = sclin.eig(Aqp)
-    O_inv = np.linalg.inv(O)
-    n = Aqp.shape[0]
-    Cqp = np.zeros_like(Aqp, dtype=complex)
-    M = O_inv @ Dqp @ np.transpose(O_inv)
-    for i in range(n): 
-        for j in range(n):
-            C = 0j
-            for k in range(n):
-                for l in range(n):
-                    o = O[i, k] * M[k, l] * O[j, l]
-                    a = eigs[k] + eigs[l]
-                    C += o/a
-            Cqp[i, j] = C
-    return np.real(Cqp)
+    import warnings
+    from scipy.linalg import solve_continuous_lyapunov
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        try:
+            Cqp = solve_continuous_lyapunov(Aqp, Dqp)
+        except RuntimeWarning as w:
+            raise ValueError(f"No well-defined stationary covariance for this drift matrix: {w}") from w
+    return (Cqp + np.transpose(Cqp)) / 2
 
 def get_friction_kernel(
     t: Union[float, np.ndarray], 
@@ -240,6 +297,10 @@ def get_friction_kernel(
 
     Returns:
         np.ndarray: friction kernel values at the requested times
+
+    Raises:
+        NotImplementedError: if Ap[0,0] != 0
+        ValueError: if Ap[1:,0] != -Ap[0,1:]
     """
     from scipy.linalg import expm
     is_scalar = np.isscalar(t)
@@ -248,7 +309,7 @@ def get_friction_kernel(
         raise RuntimeError("t should be a one-dimensional array")
     t = np.abs(t)
     Ap = np.asarray(Ap)
-    check_matrix(Ap, 'Ap')
+    check_Ap_structure(Ap)
     theta = Ap[0,1:]
     A = Ap[1:,1:]
     kernel: np.ndarray = np.einsum(
@@ -265,15 +326,19 @@ def get_friction_spectrum(
 ) -> np.ndarray:
     """Calculate the friction spectrum for a GLE with drift matrix Ap.
     
-    Computes Λ(ω) = θᵀ A (A² + ω² I)⁻¹ θ, where θ is the first row of Ap 
+    Computes Λ(ω) = θᵀ A (A² + ω² I)⁻¹ θ, where θ is the first row of Ap
     (excluding Ap[0,0]) and A is the lower-right block Ap[1:,1:].
+
+    Raises:
+        NotImplementedError: if Ap[0,0] != 0
+        ValueError: if Ap[1:,0] != -Ap[0,1:]
     """
     is_scalar = np.isscalar(omega)
     omega = np.atleast_1d(np.asarray(omega))
     if np.ndim(omega) != 1:
         raise RuntimeError("omega should be a one-dimensional array")
     Ap = np.asarray(Ap)
-    check_matrix(Ap, 'Ap')
+    check_Ap_structure(Ap)
     theta = Ap[0,1:]
     A = Ap[1:,1:]
     lamda, Q = np.linalg.eig(A)

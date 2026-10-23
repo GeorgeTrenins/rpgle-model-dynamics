@@ -8,7 +8,6 @@
 '''
 
 from __future__ import absolute_import, division, print_function
-import sys
 
 def slice_along_axis(arr, axis, start=None, end=None, step=1):
     """Return arr[..., slc, ...], where the slice is applied to 
@@ -41,34 +40,44 @@ def append_dims(arr, ndims=1):
 
 
 
-def index_in_slice(slice_obj: slice, index: int) -> bool:
+def index_in_slice(slice_obj: slice, index: int, length: int | None = None) -> bool:
     """
-    Check if the given index is within the specified slice object.
+    Check whether seq[index] is one of the elements selected by seq[slice_obj].
 
-    Parameters:
-    slice_obj (slice): The slice object to check against.
-    index (int): The index to check.
+    Args:
+        slice_obj (slice): slice with the usual Python conventions
+        index (int): index into seq; negative values count from the end
+        length (int, optional): len(seq). If None, index, start and stop must
+            be None or non-negative and the step positive, which guarantees that
+            the answer does not depend on len(seq). Defaults to None.
 
     Returns:
-    bool: True if the index is within the slice, False otherwise.
+        bool: True if index is a valid index into seq and is selected by the slice
+
+    Raises:
+        ValueError: if the step is zero, or if length is None and index, start,
+            stop or step is negative
     """
-    # Create a range object from the slice object's start, stop, and step attributes
-    range_obj = range(slice_obj.start if slice_obj.start else 0,
-                      slice_obj.stop if slice_obj.stop else sys.maxsize,
-                      slice_obj.step if slice_obj.step else 1)
+    if length is None:
+        start = slice_obj.start or 0
+        stop = index + 1 if slice_obj.stop is None else slice_obj.stop
+        step = 1 if slice_obj.step is None else slice_obj.step
+        if min(index, start, stop, step) < 0:
+            raise ValueError(f"index_in_slice({slice_obj}, {index}) may depend on the length of the sequence; pass it as `length`.")
+        return index in range(start, stop, step)
+    if not -length <= index < length:
+        return False
+    return index % length in range(length)[slice_obj]
 
-    # Check if the index is within the range object
-    return index in range_obj
 
-
-def string_to_slice(s: str) -> slice:
-    """Convert a string representation of a single integer, list of integers, or slice into a slice object
+def string_to_slice(s: str) -> int | list[int] | slice:
+    """Convert a string representation of a single integer, list of integers, or slice into an index
 
     Args:
         s (str): slice specification, e.g. '1', '0,1,3' or '2:-1:2'
 
     Returns:
-        slice: corresponding slice object
+        int | list[int] | slice: an int for '1', a list for '0,1,3', a slice for '2:-1:2' or ':'
     """
     if s == ":":
         slc = slice(None)

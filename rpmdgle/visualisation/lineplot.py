@@ -15,6 +15,7 @@ import plotly.graph_objs as go
 import plotly.express as px
 from dash import Dash, dcc, html
 from rpmdgle.visualisation._freesocket import find_free_port
+from rpmdgle.utils.arrays import string_to_slice
 import pandas as pd
 import numpy as np
 from dash.dependencies import Input, Output
@@ -23,20 +24,10 @@ import plotly.io as pio
 parser = argparse.ArgumentParser(description="Plot data from one or more files showing the confidence intervals.")
 
 parser.add_argument('-x', '--xcol', type=int, default=0, help="Index of the column containing the x-data (zero-based).")
-parser.add_argument('-y', '--ycol', type=str, default="1:", help="Index of the column containing the y-data (zero-based).")
+parser.add_argument('-y', '--ycol', type=str, default="1:", help="Columns containing the y-data (zero-based): an index, a comma-separated list or a slice.")
 parser.add_argument('-s', '--separator', type=str, default='\s+', help="Separator character")
 parser.add_argument('-H', '--header', type=int, default=None, help="Header line")
 parser.add_argument('data', nargs='+', help="Data files.")
-
-def string_to_slice(s: str) -> slice:
-    if s == ":":
-        slc = slice(None)
-    else:
-        try:
-            slc = int(s)
-        except ValueError:
-            slc = slice(*[int(s) if s else None for s in s.split(":")])
-    return slc
 
 
 def main():
@@ -56,6 +47,8 @@ def main():
         ncols = df.shape[1]
         if isinstance(slc, int):
             cols = [slc]
+        elif isinstance(slc, list):
+            cols = slc
         else:
             cols = range(ncols)[slc] 
         for y in cols:

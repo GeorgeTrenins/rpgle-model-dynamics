@@ -33,7 +33,7 @@ from rpmdgle.propagators.verlet import RingNM
 from rpmdgle.propagators.langevin import RingPILE
 from rpmdgle.utils.nmtrans import MatMulNormalModes
 import numpy.typing as npt
-from rpmdgle.utils.ou import check_matrix
+from rpmdgle.utils.ou import check_matrix, check_Ap_structure
 from scipy.linalg import expm, cholesky
 import copy
 import json
@@ -275,7 +275,12 @@ class SepGLEaux(SepGLEPILE):
             aux (list[Dict]): parametrisation of the `Ap` drift matrix 
                 (see https://doi.org/10.1021/ct900563s for definitions). Each element 
                 in the list corresponds to a different normal-mode index, in the order
-                0, -1, +1, -2, +2, ... . 
+                0, -1, +1, -2, +2, ... .
+
+        Raises:
+            ValueError: if `aux` does not have one dictionary per bead, or if
+                an `Ap` matrix does not satisfy Ap[1:,0] = -Ap[0,1:]
+            NotImplementedError: if an `Ap` matrix has Markovian friction, Ap[0,0] != 0
         """
         if (naux := len(aux)) != self.nbeads:
             raise ValueError(f"The list of auxiliary variable specs must have {self.nbeads} items, instead got {naux}. Aborting...")
@@ -289,6 +294,8 @@ class SepGLEaux(SepGLEPILE):
                 Ap = parse_aux_spec(params)
             else:
                 raise ValueError(f"Each item in the aux list must be a dictionary specifying either the Kantorovich parameters or the Ap matrix for the auxiliary variable dynamics. Got item of type {type(params)}.")
+            # only theta = Ap[0,1:] and A = Ap[1:,1:] are used below
+            check_Ap_structure(Ap)
             self.theta.append(np.copy(Ap[0,1:]))
             A = np.copy(Ap[1:,1:])
             self.Amat.append(A)

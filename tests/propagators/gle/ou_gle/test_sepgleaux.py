@@ -63,7 +63,7 @@ def direct_matrix_params(tmp_path):
     naux = 3
     Ap = build_positive_definite_A(naux, seed=12345)
     
-    params = {"aux": [Ap.tolist()]}
+    params = {"aux": [{"Ap": Ap.tolist()}]}
     matrix_path = tmp_path / "Ap_direct.json"
     with open(matrix_path, "w") as f:
         json.dump(params, f)
@@ -292,7 +292,7 @@ def test_sepgleaux_kantorovich(kantorovich_params, system_params):
     
     tvec = np.arange(max_lag + 1) * dt
     ref = np.array([
-        np.diag(gle_cxx([t], omega, Ap_full, beta=beta, mass=mass)) 
+        np.diag(gle_cxx(t, omega, Ap_full, beta=beta, mass=mass)) 
         for t in tvec
     ])
 
@@ -354,7 +354,7 @@ def test_sepgleaux_direct_matrix(direct_matrix_params, system_params):
         )
 
     # Number of auxiliary variables from the Ap matrix
-    naux = np.array(aux[0]).shape[0] - 1
+    naux = np.array(aux[0]["Ap"]).shape[0] - 1
     nvars = 2 + naux
 
     # --- 4. Simulate trajectory and write to temp file ---
@@ -381,13 +381,13 @@ def test_sepgleaux_direct_matrix(direct_matrix_params, system_params):
             del mm
 
     # --- 6. Analytical cross-correlation ---
-    Ap_full = np.array(aux[0], dtype=float)
+    Ap_full = np.array(aux[0]["Ap"], dtype=float)
     Ap_full[0, 1:] /= np.sqrt(mass)  # ensure mass-weighting is consistent with SepGLEaux
     Ap_full[1:, 0] /= np.sqrt(mass)
     
     tvec = np.arange(max_lag + 1) * dt
     ref = np.array([
-        np.diag(gle_cxx([t], omega, Ap_full, beta=beta, mass=mass)) 
+        np.diag(gle_cxx(t, omega, Ap_full, beta=beta, mass=mass)) 
         for t in tvec
     ])
 

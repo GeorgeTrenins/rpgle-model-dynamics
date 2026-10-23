@@ -25,8 +25,7 @@ def wnle_cqq(
     with γ = 1/τ and ω̄ = sqrt(ω² - γ²/4). For γ > 2ω, cos and sin become cosh
     and sinh of κt, with κ = sqrt(γ²/4 - ω²); this branch is evaluated
     as a sum of decaying exponentials to avoid overflow at long times. For
-    γ = 2ω, the bracket is 1 + γ|t|/2. The time dependence is the same as that of
-    the Brownian-oscillator kernel, `rpmdgle.sysbath.spectral.brownian.Density.K`.
+    γ = 2ω, the bracket is 1 + γ|t|/2.
 
     Args:
         t (float or ndarray): time(s) at which to evaluate the correlation function
@@ -66,43 +65,62 @@ def gle_cxx(
         Ap: Union[float, np.ndarray],
         Cp: Optional[Union[float, np.ndarray]] = None,
         C0: Optional[Union[float, np.ndarray]] = None,
-        u: Optional[Union[float, np.ndarray]] = 0,
+        u: Union[float, np.ndarray] = 0,
         beta: Optional[float] = None,
         mass: Optional[float] = 1.0) -> np.ndarray:
     """
-    Calculate the covariance matrix <v(t) v(0)^T> where v(t) = (q, p, s^T) are the
+    Calculate the covariance matrix <v(t) v(u)^T> where v(t) = (q, p, s^T) are the
     position and momentum of a harmonic oscillator plus the auxiliary variable coordinates.
-    See https://doi.org/10.1021/ct900563s for notation.
+    See https://doi.org/10.1021/ct900563s for notation. With A the drift matrix for v and
+    C the stationary covariance matrix,
+
+        <v(t) v(u)^T> = exp(-A t) (C0 - C) exp(-A^T u) + exp(-A (t-u)) C,    t >= u,
+        <v(t) v(u)^T> = exp(-A t) (C0 - C) exp(-A^T u) + C exp(-A^T (u-t)),  t < u,
+
+    where the second line is the transpose of the first with t and u exchanged. Without C0
+    the process is stationary, the first term vanishes, and t and u may take any real value.
+    With C0 the process starts at time 0, and t and u must be non-negative.
 
     Args:
-        t (float or ndarray): time(s) for which to compute the covariance matrix
+        t (float or ndarray): first time argument; a scalar, a 1-D array, or a 2-D array, whose columns correspond to the elements of a 1-D `u`
         omega (float): frequency of the harmonic oscillator
         Ap (ndarray): momentum + auxiliary variable block of the drift matrix, for dynamics expressed in mass-weighted coordinates
         Cp (ndarray, optional): stationary covariance matrix for the momentum + auxvar subsystem in the absence of an external potential (mass-weighted coordinates); allows specifyng a non-thermal distribution
-        C0 (ndarray, optional): covariance matrix at time 0, in mass-weighted coordinates
-        u (float or ndarray, optional): second time variable for cross-correlation, to calculate <v(t) v(u)^T>
+        C0 (ndarray, optional): covariance matrix at time 0, in mass-weighted coordinates. Defaults to None, for the stationary process
+        u (float or ndarray, optional): second time argument; a scalar or a 1-D array. Defaults to 0
         beta (float, optional): reciprocal temperature, 1/kB*T
         mass (float, optional): mass of the harmonic oscillator
 
     Returns:
-        ndarray: covariance matrix
+        ndarray: covariance matrices of shape S + (n+1, n+1), where n = Ap.shape[0] and
+            S = (len(t), len(u)) if both are 1-D, otherwise S = np.broadcast_shapes(t.shape, u.shape).
+
+    Notes:
+        output[..., i, j] = <v_i(t') v_j(u')>, where the times t' and u' are taken from `t` and `u` as follows:
+
+            t           u        element              t'         u'
+            scalar      scalar   output[i, j]         t          u
+            (nt,)       scalar   output[k, i, j]      t[k]       u
+            (mt, nt)    scalar   output[l, k, i, j]   t[l, k]    u
+            scalar      (nu,)    output[l, i, j]      t          u[l]
+            (nt,)       (nu,)    output[l, k, i, j]   t[l]       u[k]
+            (nt, nu)    (nu,)    output[l, k, i, j]   t[l, k]    u[k]
     """
     from scipy.linalg import expm
-    t = np.asarray(t)
-    if t.ndim == 1:
-        t = np.reshape(t, (1,-1,1,1)) 
-    elif t.ndim == 2:
-        t = t[...,None,None]
-    else:
-        raise RuntimeError('t should either be a one- or two-dimensional array')
-    if np.any(t < 0):
-        raise RuntimeError("Can only request positive times!")
-    u = np.atleast_1d(u)
-    if u.ndim != 1:
+    t = np.asarray(t, dtype=float)
+    if t.ndim > 2:
+        raise RuntimeError('t should be a scalar, or a one- or two-dimensional array')
+    u = np.asarray(u, dtype=float)
+    if u.ndim > 1:
         raise RuntimeError('u should be a scalar or a one-dimensional array')
-    u = np.reshape(u, (-1,1,1,1))
-    if np.any(u < 0):
-        raise RuntimeError("Can only request positive times!")
+    if C0 is not None and (np.any(t < 0) or np.any(u < 0)):
+        raise RuntimeError("Negative times are only allowed for the stationary process, C0 = None.")
+    if t.ndim == 1 and u.ndim == 1:
+        # outer product: t varies along the leading axis of the output, u along the trailing axis
+        t = t[:,None]
+    # trailing axes for the matrix dimensions
+    t = t[...,None,None]
+    u = u[...,None,None]
     if (beta is None and Cp is None) or (beta is not None and Cp is not None):
         raise RuntimeError("Specify either beta (for detailed balance) or Cp (for a general thermostat), not both.")
     Ap = np.atleast_2d(Ap)
@@ -129,14 +147,17 @@ def gle_cxx(
         else:
             C0[:,:] = C0_
         term0 = expm(-A_qp * t) @ (C0 - C_qp) @ expm(-np.transpose(A_qp) * u)
-    term1 = expm(-A_qp * np.abs(t - u)) @ C_qp
+    # stationary part: exp(-A (t-u)) C for t >= u, and its transpose C exp(-A^T (u-t)) for t < u
+    tau = t - u
+    term1 = expm(-A_qp * np.abs(tau)) @ C_qp
+    term1 = np.where(tau >= 0, term1, np.swapaxes(term1, -1, -2))
     tcf = term0 + term1
-    sqm = np.sqrt(mass) # rescaling for mass != 1 
+    sqm = np.sqrt(mass) # rescaling for mass != 1
     sqmvec = np.ones(n+1)
     sqmvec[0] = 1/sqm
     sqmvec[1] = sqm
     sqmmat = sqmvec[:,None] * sqmvec[None,:]
-    return np.squeeze(tcf * sqmmat)
+    return tcf * sqmmat
 
 def check_matrix(
         M : Union[float, np.ndarray],

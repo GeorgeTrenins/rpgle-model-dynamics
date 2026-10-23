@@ -56,8 +56,9 @@ The notation follows Ceriotti et al. (doi:10.1021/ct900563s). `Ap` is the drift 
 - `gle_cxx(t, omega, Ap, Cp=None, C0=None, u=0, beta=None, mass=1.0)` returns $\langle v(t)\,v(u)^\mathsf{T}\rangle$ for $v = (q, p, \mathbf{s})$ of a harmonic oscillator.
   - Pass exactly one of `beta` and `Cp`. `beta` selects the canonical stationary state. `Cp` gives a general stationary covariance of $(p, \mathbf{s})$, and β is then taken as `1/Cp[0,0]`.
   - `C0` sets a non-stationary covariance at time 0. A 1×1 or 2×2 `C0` sets only the $(q, p)$ block, and the rest is filled with $\mathbb{1}/\beta$.
-  - `t` must be a 1-D (or 2-D) array. **A scalar `t` raises `RuntimeError`**, so pass `[t]`. Times must be non-negative.
-  - With 1-D `t` and scalar `u`, the result has shape `(len(t), 2+naux, 2+naux)`. It is squeezed, so a length-1 `t` loses that axis.
+  - `t` is a scalar, a 1-D array, or a 2-D array whose columns correspond to the elements of a 1-D `u`. `u` is a scalar or a 1-D array.
+  - The result has shape `S + (2+naux, 2+naux)`. If `t` and `u` are both 1-D, the result is their outer product, with `S = (len(t), len(u))`. Otherwise, `t` and `u` broadcast as NumPy arrays. In both cases `t` varies along the leading axis of `S` and `u` along the trailing axis.
+  - Without `C0`, the process is stationary and `t` and `u` may take any real value. With `C0`, the process starts at time 0, so a negative time raises `RuntimeError`.
   - $q$ and $p$ are returned in physical units (rescaled by `mass`). The auxiliary components stay mass-weighted.
 - `get_Cqp` solves $A_{qp}C + CA_{qp}^\mathsf{T} = D_{qp}$ by eigendecomposition, in an O(n⁴) loop. That is fine for a few auxiliary variables.
 - `wnle_cqq(t, beta, omega, tau, m=1)` gives $\langle q(t)q(0)\rangle$ under white-noise Langevin dynamics with friction $\gamma = 1/\tau$.

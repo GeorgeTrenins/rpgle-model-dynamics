@@ -292,7 +292,7 @@ def test_sepgleaux_kantorovich(kantorovich_params, system_params):
     
     tvec = np.arange(max_lag + 1) * dt
     ref = np.array([
-        np.diag(gle_cxx([t], omega, Ap_full, beta=beta, mass=mass)) 
+        np.diag(gle_cxx(t, omega, Ap_full, beta=beta, mass=mass)) 
         for t in tvec
     ])
 
@@ -387,7 +387,7 @@ def test_sepgleaux_direct_matrix(direct_matrix_params, system_params):
     
     tvec = np.arange(max_lag + 1) * dt
     ref = np.array([
-        np.diag(gle_cxx([t], omega, Ap_full, beta=beta, mass=mass)) 
+        np.diag(gle_cxx(t, omega, Ap_full, beta=beta, mass=mass)) 
         for t in tvec
     ])
 

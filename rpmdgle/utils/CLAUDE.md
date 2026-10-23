@@ -12,7 +12,7 @@ Self-contained numerical helpers. When you add a submodule, add its name to both
 | `kernel_transforms` | friction kernels of non-centroid modes; DCT kernel ↔ spectrum helpers | `sysbath/spectral/splined.py` (`shift_lambda_to_kernel` with `n=0` only) |
 | `calculus` | `GL_quad`, `FFTFourierIntegral` | `rates/rpmdrate.py` (`GL_quad`) |
 | `kde` | kernel density estimate | `rates/analyse.py` |
-| `special` | `sinc` and its derivatives, overflow-safe `logcosh` and `logsinh` | `ou.wnle_cqq` |
+| `special` | `sinc` and its derivatives, overflow-safe `logcosh` and `logsinh` | nothing in the package |
 
 ## Normal modes (`nmtrans`, `rfft`)
 
@@ -60,7 +60,9 @@ The notation follows Ceriotti et al. (doi:10.1021/ct900563s). `Ap` is the drift 
   - With 1-D `t` and scalar `u`, the result has shape `(len(t), 2+naux, 2+naux)`. It is squeezed, so a length-1 `t` loses that axis.
   - $q$ and $p$ are returned in physical units (rescaled by `mass`). The auxiliary components stay mass-weighted.
 - `get_Cqp` solves $A_{qp}C + CA_{qp}^\mathsf{T} = D_{qp}$ by eigendecomposition, in an O(n⁴) loop. That is fine for a few auxiliary variables.
-- `wnle_cqq(t, beta, omega, tau, m)` gives $\langle q(t)q(0)\rangle$ under white-noise Langevin dynamics with friction $\gamma = 1/\tau$. `omega` and `tau` must be scalars. **Known bug:** the branch condition is `elif test < eps` instead of `< -eps`. As a result, the critical-damping branch is unreachable, and $\omega\tau = 1/2$ exactly returns NaN.
+- `wnle_cqq(t, beta, omega, tau, m=1)` gives $\langle q(t)q(0)\rangle$ under white-noise Langevin dynamics with friction $\gamma = 1/\tau$.
+  - `omega` and `tau` must be scalars. All four parameters must be positive, or it raises `ValueError`.
+  - `gle_cxx(t, omega, [[1/tau]], beta=beta, mass=m)[..., 0, 0]` gives the same function by an independent route, which makes it a useful check.
 
 ## Non-centroid friction kernels (`kernel_transforms`)
 

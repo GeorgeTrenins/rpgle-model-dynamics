@@ -15,33 +15,50 @@ def wnle_cqq(
         beta: float,
         omega: float,
         tau: float,
-        m: Optional[float] = 1):
+        m: float = 1):
     """
     Position auto-correlation function for a harmonic oscillator at thermal equilibrium,
-    under the action of a white-noise Langevin equation thermostat (WNLE).
+    under the action of a white-noise Langevin equation thermostat (WNLE),
+
+        <q(t) q(0)> = exp(-γ|t|/2) [cos(ω̄|t|) + γ/(2ω̄) sin(ω̄|t|)] / (β m ω²)
+
+    with γ = 1/τ and ω̄ = sqrt(ω² - γ²/4). For γ > 2ω, cos and sin become cosh
+    and sinh of κt, with κ = sqrt(γ²/4 - ω²); this branch is evaluated
+    as a sum of decaying exponentials to avoid overflow at long times. For
+    γ = 2ω, the bracket is 1 + γ|t|/2. The time dependence is the same as that of
+    the Brownian-oscillator kernel, `rpmdgle.sysbath.spectral.brownian.Density.K`.
 
     Args:
-        t (float or ndarray): time(s) for which to compute the covariance matrix
+        t (float or ndarray): time(s) at which to evaluate the correlation function
         beta (float): reciprocal temperature, 1/kB*T
         omega (float): frequency of the harmonic oscillator
         tau (float): reciprocal of the friction, tau = 1/gamma
         m (float, optional): mass of the harmonic oscillator
 
     Returns:
-        ndarray: covariance matrix
+        float or ndarray: position auto-correlation function at time(s) t
     """
-    Omega = np.sqrt(np.abs(omega**2 - 1/(2*tau)**2))
-    eps = 1.0e-4
-    test = omega*tau - 0.5
-    if test > eps:
-        ans = np.exp(-t/(2*tau)) * (np.cos(Omega*t) + np.sin(Omega*t) / (2*Omega*tau))
-    elif test < eps:
-        from rpmdgle.utils.special import logcosh, logsinh
-        ans = np.exp(-t/(2*tau) + logcosh(Omega*t))
-        ans += np.exp(-t/(2*tau) + logsinh(Omega*t).real) / (2*Omega*tau)
+    for name, value in zip(('beta', 'omega', 'tau', 'm'), (beta, omega, tau, m)):
+        if not value > 0:
+            raise ValueError(f"Expected a positive value for {name}, instead got {value}")
+    t = np.abs(t)
+    gamma = 1/tau
+    prefactor = 1 / (beta * m * omega**2)
+    # s = ω̄², where ω̄ is the damped frequency of the oscillator
+    s = omega**2 - gamma**2/4
+    if s > 0:
+        wbar = np.sqrt(s)
+        return prefactor * np.exp(-gamma*t/2) * (
+            np.cos(wbar*t) +
+            gamma/(2*wbar) * np.sin(wbar*t))
+    elif s < 0:
+        kappa = np.sqrt(-s)
+        rate = omega**2 / (gamma/2 + kappa)
+        return prefactor * np.exp(-rate*t) * (
+            (1 + np.exp(-2*kappa*t))/2 -
+            gamma/(4*kappa) * np.expm1(-2*kappa*t))
     else:
-        ans = np.exp(-t/(2*tau)) * (1 + t/(2*tau))
-    return ans / (beta * m * omega**2)
+        return prefactor * np.exp(-gamma*t/2) * (1 + gamma*t/2)
 
 def gle_cxx(
         t: Union[float, np.ndarray], 

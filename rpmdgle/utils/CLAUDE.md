@@ -40,7 +40,7 @@ Self-contained numerical helpers. When you add a submodule, add its name to both
 - `time_averaged_correlation(A, B, lag, axis=0)` returns `lag + 1` points. It splits the time origins into consecutive non-overlapping blocks of `lag + 1`, correlates each block against a window of `B` with `2*lag + 1` points, and averages the blocks. Every origin in a complete block contributes to every lag, and tail points that do not complete a block are dropped.
   - It needs at least `2*lag + 1` points along `axis`. With fewer, it returns all NaN, because the block count is zero.
   - The result is allocated as a real array.
-- `tests/utils/test_tcfs.py` checks both functions against explicit loops. No other module in `utils` has its own tests.
+- `tests/utils/test_tcfs.py` checks both functions against explicit loops.
 
 ## GLE and OU reference results (`ou`)
 
@@ -95,7 +95,13 @@ Normal mode $n$ sees the frequency-shifted bath $J_n(\omega) = J\big(\sqrt{\omeg
 - `kde.kde(data, grid, bw, kernel="gaussian", axis=-1)` averages `kernel(data, grid, bw)` over `axis`, so the caller has to broadcast the arguments, as in `kde(data[..., None], xgrid, bw, axis=0)`.
   - `kde()` looks the kernel up by name in `KERNELS`. The `@register` decorator fills that dictionary, under the function name minus its `_kernel` suffix. The registered kernels are `gaussian`, `tophat`, `triangular`, `epanechnikov` and `tricube`. `analyse.py` uses `epanechnikov`.
   - To add a kernel, define `<name>_kernel(x, mu, sigma)` and decorate it with `@register`; `kde()` itself needs no change. An unknown name raises `ValueError`, and the message lists the registered kernels.
-- `special.sinc(x, nu=0)` is the *unnormalised* $\sin x / x$; `scipy.special.sinc` is $\sin \pi x/\pi x$. With `nu = 1` or `2` it returns the first or second derivative, and switches to a Taylor series for $|x| < 10^{-4}\pi$.
+- `special.sinc(x, nu=0)` is the *unnormalised* $\sin x / x$; `scipy.special.sinc` is $\sin \pi x/\pi x$. It returns the derivative of any order `nu` ≥ 0 in terms of scipy's `spherical_jn`
+  - Points x whose real part has its sign bit set (i.e., real part is negative) are evaluated at −x and multiplied by $(-1)^\nu$. This is needed because scipy's 
+    ```py
+    spherical_jn(n, -(a+0j)) = -spherical_jn(n, -a-0j) \
+                            = -spherical_jn(n, -np.conj(a+0j))
+    ```
+    With the fix, $f(-x) = (-1)^\nu f(x)$ and $f(\bar x) = \overline{f(x)}$ hold bitwise for all x.
 - `special.logcosh` and `special.logsinh` take real input. `logsinh` always returns a complex array, adding $i\pi$ for $x < 0$, so take `.real` for $x > 0$. `logsinh(0)` is `-inf`.
 - `arrays.slice_along_axis` and `arrays.idx_along_axis` use basic indexing and return views. Writes through them reach the original array, which `pes/pi.py` relies on.
 - `arrays.append_dims(arr, n)` appends `n` size-1 axes, so that per-mode or per-bead arrays broadcast against configurations.
@@ -124,7 +130,7 @@ This package does **not** fit anything. It takes Kantorovich parameters (`tauD`,
 
 ## Testing
 
-Only `tcfs` has direct tests. `test_sepgleaux.py` uses `ou.gle_cxx` as a reference, so that function is also exercised. Put new tests in `tests/utils/test_<module>.py` and keep the file name unique across `tests/` (see `tests/CLAUDE.md`). Good candidates are:
+Only `tcfs` and `special` have direct tests. `test_special.py` compares `sinc` with `mpmath.diff` at 50 digits for `nu` ≤ 30, for real and complex x, and with the Taylor series at small |x|; it needs `mpmath`, which SymPy already depends on. The complex reference takes most of its 4 s. `test_sepgleaux.py` uses `ou.gle_cxx` as a reference, so that function is also exercised. Put new tests in `tests/utils/test_<module>.py` and keep the file name unique across `tests/` (see `tests/CLAUDE.md`). Good candidates are:
 
 - that `FFTNormalModes` and `MatMulNormalModes` agree (move the `nmtrans` `__main__` block into a test);
 - that `get_friction_spectrum` matches a `quad` cosine transform of `get_friction_kernel`;

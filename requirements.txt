@@ -1,9 +1,13 @@
 numpy
 scipy
 sympy
+mpmath
 matplotlib
-ase
-pandas
+pandas>=1.5
 pytest
 opt_einsum
 tqdm
+gvar
+plotly
+dash>=2.0
+jupyter

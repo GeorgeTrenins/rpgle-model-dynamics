@@ -325,9 +325,17 @@ def get_friction_spectrum(
     Ap: np.ndarray
 ) -> np.ndarray:
     """Calculate the friction spectrum for a GLE with drift matrix Ap.
-    
-    Computes Λ(ω) = θᵀ A (A² + ω² I)⁻¹ θ, where θ is the first row of Ap
+
+    Computes Λ(ω) = θᵀ A (A² + ω² I)⁻¹ θ = Re θᵀ (A + iω I)⁻¹ θ, where θ is the first row of Ap
     (excluding Ap[0,0]) and A is the lower-right block Ap[1:,1:].
+
+    Args:
+        omega (Union[float, np.ndarray]): frequency or frequencies at which to compute the friction spectrum
+        Ap (np.ndarray): drift matrix for the momentum + auxiliary variables block
+
+    Returns:
+        np.ndarray: friction spectrum values at the requested frequencies; np.inf wherever A + iω I
+            is singular, i.e., where the friction kernel has an undamped component at frequency ω
 
     Raises:
         NotImplementedError: if Ap[0,0] != 0
@@ -341,13 +349,17 @@ def get_friction_spectrum(
     check_Ap_structure(Ap)
     theta = Ap[0,1:]
     A = Ap[1:,1:]
-    lamda, Q = np.linalg.eig(A)
-    y = np.linalg.solve(Q, theta)  # y = Q⁻¹θ
-    z = Q.T @ theta           
-    spectrum: np.ndarray = np.real(np.sum(
-        y*z*lamda / (lamda**2 + omega[:,None]**2),
-        axis=-1
-    ))
+    M = A + 1j * omega[:,None,None] * np.eye(len(theta))
+    try:
+        spectrum: np.ndarray = np.real(np.linalg.solve(M, theta) @ theta)
+    except np.linalg.LinAlgError:
+        # at least one A + iω I is singular: solve frequency by frequency and return inf at the poles
+        spectrum = np.empty(len(omega))
+        for i, Mi in enumerate(M):
+            try:
+                spectrum[i] = np.real(np.linalg.solve(Mi, theta) @ theta)
+            except np.linalg.LinAlgError:
+                spectrum[i] = np.inf
     if is_scalar:
         return spectrum.item()
     else:

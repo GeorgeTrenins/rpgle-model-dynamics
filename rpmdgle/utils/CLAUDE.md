@@ -49,6 +49,8 @@ The notation follows Ceriotti et al. (doi:10.1021/ct900563s). `Ap` is the drift 
 - `get_friction_kernel(t, Ap)` $= \theta^\mathsf{T} e^{-|t|A}\theta$.
 - `get_friction_spectrum(ω, Ap)` $= \theta^\mathsf{T} A (A^2+\omega^2)^{-1}\theta = \int_0^\infty K(t)\cos\omega t\,\mathrm{d}t$.
 
+  For real $A$ this equals $\mathrm{Re}\,\theta^\mathsf{T}(A+i\omega)^{-1}\theta$, which the function evaluates with one batched LU solve over ω. No eigenbasis is needed, so the result stays accurate when $A$ is defective. `get_friction_kernel` uses `expm`, which is also safe for defective $A$. Where $A+i\omega$ is exactly singular, the kernel has an undamped component at ω (for example, a singular $A$ at ω = 0), and the function returns `np.inf` at that frequency.
+
   These two functions use the same normalisation as `Density.K` and `Density.Lambda`, so the results compare directly with a bath, as `auxplot.py` does. Each takes a scalar, which returns a float, or a 1-D array. They read only `Ap[0, 1:]` and `Ap[1:, 1:]`, so they require `Ap[0, 0] = 0` and `Ap[1:, 0] = -θ`, which `build_Ap_kantorovich` and the test fixtures produce. `check_Ap_structure` enforces this in both functions, and also in `SepGLEaux.build_aux`, which likewise reads only θ and A. A non-zero `Ap[0, 0]` (Markovian friction) raises `NotImplementedError`; the test is exact. A coupling that is not antisymmetric raises `ValueError`, with relative tolerance 1e-12.
 - **Two mass conventions for `Ap`.**
   - `SepGLEaux`, `parse_aux_spec`, and `auxplot.py`: $\theta^\mathsf{T} e^{-tA}\theta$ is the friction kernel *including* the mass, in the same units as `Density.K` (mass/time²).
@@ -113,4 +115,4 @@ Normal mode $n$ sees the frequency-shifted bath $J_n(\omega) = J\big(\sqrt{\omeg
 
 ## Testing
 
-Only `tcfs`, `special` and `arrays.index_in_slice` have direct tests. `test_sepgleaux.py` uses `ou.gle_cxx` as a reference, so that function is also exercised. Put new tests in `tests/utils/test_<module>.py` and keep the file name unique across `tests/` (see `tests/CLAUDE.md`).
+Only `tcfs`, `special`, `arrays.index_in_slice` and `ou.get_friction_spectrum` have direct tests. `test_ou.py` checks the spectrum against closed forms for Jordan blocks and Kantorovich matrices, and against the cosine transform of `get_friction_kernel`. `test_sepgleaux.py` uses `ou.gle_cxx` as a reference, so that function is also exercised. Put new tests in `tests/utils/test_<module>.py` and keep the file name unique across `tests/` (see `tests/CLAUDE.md`).

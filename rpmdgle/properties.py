@@ -207,7 +207,7 @@ class PropertyTracker(object):
         if stride is None:
             stride = 1
         else:
-            stride = int(np.ceil(propa.UNITS.str2base(stride)/propa.dt)) 
+            stride = max(1, int(np.rint(propa.UNITS.str2base(stride)/propa.dt)))
         postA = d.get('postA')
         if postA is not None:
             postA = eval(postA)

@@ -192,7 +192,7 @@ def equilibrate(UNITS, T, propa, args, resample_bath=False):
         args (Namespace): command-line arguments (see parser)
         resample_bath (bool, optional): resample the bath positions and momenta from the thermal distribution, conditional on the system coordinates. Defaults to False.
     """
-    nequil = int(np.ceil(UNITS.str2base(args.burn)/propa.dt)) 
+    nequil = int(np.rint(UNITS.str2base(args.burn)/propa.dt))
     beta = UNITS.betaTemp(T)
     propa.set_pnm(propa.psample(beta))
     if resample_bath and ( getattr(args, "bath", None) is not None ):
@@ -219,7 +219,7 @@ def production(UNITS, T, propa, args, prefix=None):
     """
     print("Production trajectory")
     proprec = make_property_tracker(args, propa, prefix=prefix)[2]
-    ntraj = int(np.ceil(UNITS.str2base(args.traj)/propa.dt))
+    ntraj = max(1, int(np.rint(UNITS.str2base(args.traj)/propa.dt)))
     if ntraj <= 100:
         infostride=1
     else:

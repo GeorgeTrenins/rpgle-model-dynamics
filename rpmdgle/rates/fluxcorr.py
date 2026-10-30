@@ -75,9 +75,9 @@ def production_run(
     from rpmdgle.rates.qtst import make_property_tracker, sample_bath_modes
     # timestep in the units of the stride
     stride = propa2.dt if args.stride is None else args.stride
-    nrelax = int(np.ceil(UNITS.str2base(args.relax)/propa1.dt)) 
+    nrelax = int(np.rint(UNITS.str2base(args.relax)/propa1.dt))
     ntraj, nstride = [
-        int(np.ceil(UNITS.str2base(time)/propa2.dt)) 
+        max(1, int(np.rint(UNITS.str2base(time)/propa2.dt)))
         for time in (args.traj, stride)]
     dt, _, proprec = make_property_tracker(args, propa2, prefix=prefix)
     x0 = np.zeros((1+ntraj//nstride,args.nrep))
